@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # ─── Server CI ──────────────────────────────────────────────────────────────
+  server:
+    name: Server (lint + test + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: collabspace_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://postgres:password@localhost:5432/collabspace_test
+      JWT_ACCESS_SECRET: ci_access_secret_32_chars_minimum__
+      JWT_REFRESH_SECRET: ci_refresh_secret_32_chars_minimum_
+      NODE_ENV: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+
+      - name: Push DB schema
+        run: npx prisma db push
+
+      - name: Lint
+        run: npm run lint || true   # non-blocking in CI until lint rules finalised
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  # ─── Client CI ──────────────────────────────────────────────────────────────
+  client:
+    name: Client (lint + build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: client
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:5000/api
+          NEXT_PUBLIC_SOCKET_URL: http://localhost:5000
+
+  # ─── Deploy (main branch only) ──────────────────────────────────────────────
+  deploy-client:
+    name: Deploy client → Vercel
+    needs: client
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Vercel
+        run: |
+          echo "Add vercel deploy steps or use Vercel GitHub integration"
+        # Recommended: enable Vercel GitHub Integration instead of CLI deployment
+
+  deploy-server:
+    name: Deploy server → Railway
+    needs: server
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy to Railway
+        run: |
+          echo "Add railway CLI deploy steps or use Railway GitHub Integration"
+        # Recommended: enable Railway GitHub Integration for automatic deploys

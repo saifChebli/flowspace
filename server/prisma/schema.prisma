@@ -1,0 +1,352 @@
+// This is your Prisma schema file for CollabSpace
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────────
+
+enum WorkspaceRole {
+  ADMIN
+  MEMBER
+}
+
+enum ProjectRole {
+  MEMBER
+  CLIENT
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+  CLIENT_VISIBLE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_MENTIONED
+  MESSAGE_MENTIONED
+  INVITE_ACCEPTED
+  FILE_UPLOADED
+}
+
+enum FileStorage {
+  S3
+  CLOUDINARY
+}
+
+// ─── User ─────────────────────────────────────────────────────────────────────
+
+model User {
+  id               String   @id @default(cuid())
+  email            String   @unique
+  name             String
+  avatarUrl        String?
+  passwordHash     String
+  emailVerified    Boolean  @default(false)
+  emailVerifyToken String?
+  resetToken       String?
+  resetTokenExpiry DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  workspaceMembers  WorkspaceMember[]
+  projectMembers    ProjectMember[]
+  sentMessages      Message[]
+  taskAssignees     TaskAssignee[]
+  taskComments      TaskComment[]
+  uploadedFiles     File[]
+  notifications     Notification[]     @relation("NotificationRecipient")
+  actorNotifications Notification[]    @relation("NotificationActor")
+  inviteTokens      InviteToken[]
+  refreshTokens     RefreshToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+// ─── Workspace ────────────────────────────────────────────────────────────────
+
+model Workspace {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     WorkspaceMember[]
+  projects    Project[]
+  inviteTokens InviteToken[]
+
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  joinedAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@map("workspace_members")
+}
+
+// ─── Project ──────────────────────────────────────────────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  workspaceId String
+  name        String
+  description String?
+  archived    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members      ProjectMember[]
+  channels     Channel[]
+  boards       Board[]
+  files        File[]
+  inviteTokens InviteToken[]
+
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String      @id @default(cuid())
+  projectId String
+  userId    String
+  role      ProjectRole @default(MEMBER)
+  joinedAt  DateTime    @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@map("project_members")
+}
+
+// ─── Channel & Messages ───────────────────────────────────────────────────────
+
+model Channel {
+  id          String      @id @default(cuid())
+  projectId   String
+  name        String
+  type        ChannelType @default(PUBLIC)
+  description String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messages Message[]
+
+  @@unique([projectId, name])
+  @@map("channels")
+}
+
+model Message {
+  id          String   @id @default(cuid())
+  channelId   String
+  authorId    String
+  body        String
+  editedAt    DateTime?
+  deletedAt   DateTime?
+  createdAt   DateTime @default(now())
+
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User              @relation(fields: [authorId], references: [id])
+  attachments MessageAttachment[]
+  mentions    MessageMention[]
+
+  @@map("messages")
+}
+
+model MessageAttachment {
+  id        String @id @default(cuid())
+  messageId String
+  fileId    String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  file    File    @relation(fields: [fileId], references: [id])
+
+  @@map("message_attachments")
+}
+
+model MessageMention {
+  id        String @id @default(cuid())
+  messageId String
+  userId    String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@map("message_mentions")
+}
+
+// ─── Board & Tasks ────────────────────────────────────────────────────────────
+
+model Board {
+  id        String   @id @default(cuid())
+  projectId String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lists   BoardList[]
+
+  @@map("boards")
+}
+
+model BoardList {
+  id        String   @id @default(cuid())
+  boardId   String
+  name      String
+  position  Int
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@map("board_lists")
+}
+
+model Task {
+  id          String       @id @default(cuid())
+  listId      String
+  title       String
+  description String?
+  priority    TaskPriority @default(MEDIUM)
+  position    Int
+  dueDate     DateTime?
+  labels      String[]
+  completedAt DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  list          BoardList      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  assignees     TaskAssignee[]
+  comments      TaskComment[]
+  notifications Notification[]
+
+  @@map("tasks")
+}
+
+model TaskAssignee {
+  id         String   @id @default(cuid())
+  taskId     String
+  userId     String
+  assignedAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, userId])
+  @@map("task_assignees")
+}
+
+model TaskComment {
+  id        String    @id @default(cuid())
+  taskId    String
+  authorId  String
+  body      String
+  editedAt  DateTime?
+  createdAt DateTime  @default(now())
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@map("task_comments")
+}
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+model File {
+  id          String      @id @default(cuid())
+  projectId   String
+  uploadedById String
+  name        String
+  mimeType    String
+  sizeBytes   Int
+  storage     FileStorage @default(S3)
+  storageKey  String      // S3 key or Cloudinary public_id
+  url         String
+  createdAt   DateTime    @default(now())
+
+  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy   User                @relation(fields: [uploadedById], references: [id])
+  attachments  MessageAttachment[]
+
+  @@map("files")
+}
+
+// ─── Notifications ────────────────────────────────────────────────────────────
+
+model Notification {
+  id         String           @id @default(cuid())
+  recipientId String
+  actorId     String?
+  type        NotificationType
+  read        Boolean          @default(false)
+  taskId      String?
+  meta        Json?
+  createdAt   DateTime         @default(now())
+
+  recipient User  @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor     User? @relation("NotificationActor", fields: [actorId], references: [id])
+  task      Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
+
+  @@map("notifications")
+}
+
+// ─── Invite Tokens ────────────────────────────────────────────────────────────
+
+model InviteToken {
+  id          String    @id @default(cuid())
+  token       String    @unique @default(cuid())
+  email       String
+  workspaceId String?
+  projectId   String?
+  role        String
+  createdById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  workspace Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User       @relation(fields: [createdById], references: [id])
+
+  @@map("invite_tokens")
+}

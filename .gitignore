@@ -1,0 +1,39 @@
+# dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# build outputs
+.next/
+out/
+build/
+dist/
+coverage/
+client/.next/
+server/dist/
+
+# environment files
+.env
+.env.*
+!.env.example
+!.env.local.example
+client/.env.local
+server/.env
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# editor and OS
+.DS_Store
+*.pem
+
+# TypeScript
+*.tsbuildinfo
+client/next-env.d.ts
+
+# local git history backup
+.client-git-history/
