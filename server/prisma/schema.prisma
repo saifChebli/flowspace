@@ -51,17 +51,18 @@ enum FileStorage {
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
-  id               String   @id @default(cuid())
-  email            String   @unique
-  name             String
-  avatarUrl        String?
-  passwordHash     String
-  emailVerified    Boolean  @default(false)
-  emailVerifyToken String?
-  resetToken       String?
-  resetTokenExpiry DateTime?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  email                  String    @unique
+  name                   String
+  avatarUrl              String?
+  passwordHash           String
+  emailVerified          Boolean   @default(false)
+  emailVerifyToken       String?   // stores SHA-256 hash of raw token
+  emailVerifyTokenExpiry DateTime?
+  resetToken             String?   // stores SHA-256 hash of raw token
+  resetTokenExpiry       DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   workspaceMembers  WorkspaceMember[]
   projectMembers    ProjectMember[]

@@ -93,11 +93,17 @@ export async function inviteMember(slug: string, inviterId: string, input: Invit
 }
 
 export async function acceptInvite(token: string, userId: string) {
-  const invite = await prisma.inviteToken.findUnique({ where: { token } });
+  const [invite, actor] = await Promise.all([
+    prisma.inviteToken.findUnique({ where: { token } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+  ]);
 
   if (!invite || invite.expiresAt < new Date()) throw new AppError(400, 'Invalid or expired invite');
   if (invite.acceptedAt) throw new AppError(400, 'Invite already accepted');
   if (!invite.workspaceId) throw new AppError(400, 'Invalid invite type');
+  if (!actor || actor.email.toLowerCase() !== invite.email.toLowerCase()) {
+    throw new AppError(403, 'This invite was not sent to your email address');
+  }
 
   const exists = await prisma.workspaceMember.findUnique({
     where: { workspaceId_userId: { workspaceId: invite.workspaceId, userId } },

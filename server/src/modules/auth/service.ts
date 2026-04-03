@@ -19,7 +19,9 @@ export async function register(input: RegisterInput) {
   if (existing) throw new AppError(409, 'Email already registered');
 
   const passwordHash = await bcrypt.hash(input.password, 12);
-  const emailVerifyToken = crypto.randomBytes(32).toString('hex');
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const emailVerifyToken = hashToken(rawToken);
+  const emailVerifyTokenExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
   const user = await prisma.user.create({
     data: {
@@ -27,11 +29,12 @@ export async function register(input: RegisterInput) {
       name: input.name,
       passwordHash,
       emailVerifyToken,
+      emailVerifyTokenExpiry,
     },
     select: { id: true, email: true, name: true },
   });
 
-  const verifyUrl = `${env.CLIENT_URL}/auth/verify-email?token=${emailVerifyToken}`;
+  const verifyUrl = `${env.CLIENT_URL}/auth/verify-email?token=${rawToken}`;
   await sendEmail({
     to: user.email,
     subject: 'Verify your CollabSpace email',
@@ -42,12 +45,18 @@ export async function register(input: RegisterInput) {
 }
 
 export async function verifyEmail(token: string) {
-  const user = await prisma.user.findFirst({ where: { emailVerifyToken: token } });
+  const hashed = hashToken(token);
+  const user = await prisma.user.findFirst({
+    where: {
+      emailVerifyToken: hashed,
+      emailVerifyTokenExpiry: { gt: new Date() },
+    },
+  });
   if (!user) throw new AppError(400, 'Invalid or expired verification token');
 
   await prisma.user.update({
     where: { id: user.id },
-    data: { emailVerified: true, emailVerifyToken: null },
+    data: { emailVerified: true, emailVerifyToken: null, emailVerifyTokenExpiry: null },
   });
 
   return { message: 'Email verified successfully' };
@@ -96,7 +105,8 @@ export async function forgotPassword(input: ForgotPasswordInput) {
   // Always return success to avoid email enumeration
   if (!user) return { message: 'If that email exists, a reset link has been sent.' };
 
-  const resetToken = crypto.randomBytes(32).toString('hex');
+  const rawToken = crypto.randomBytes(32).toString('hex');
+  const resetToken = hashToken(rawToken);
   await prisma.user.update({
     where: { id: user.id },
     data: {
@@ -105,7 +115,7 @@ export async function forgotPassword(input: ForgotPasswordInput) {
     },
   });
 
-  const resetUrl = `${env.CLIENT_URL}/auth/reset-password?token=${resetToken}`;
+  const resetUrl = `${env.CLIENT_URL}/auth/reset-password?token=${rawToken}`;
   await sendEmail({
     to: user.email,
     subject: 'Reset your CollabSpace password',
@@ -116,9 +126,10 @@ export async function forgotPassword(input: ForgotPasswordInput) {
 }
 
 export async function resetPassword(input: ResetPasswordInput) {
+  const hashed = hashToken(input.token);
   const user = await prisma.user.findFirst({
     where: {
-      resetToken: input.token,
+      resetToken: hashed,
       resetTokenExpiry: { gt: new Date() },
     },
   });
@@ -146,6 +157,10 @@ export async function getMe(userId: string) {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function hashToken(raw: string): string {
+  return crypto.createHash('sha256').update(raw).digest('hex');
+}
 
 async function issueTokens(userId: string, email: string) {
   const jti = uuidv4();
