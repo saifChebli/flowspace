@@ -1,6 +1,17 @@
+'use client';
+
 import Link from 'next/link';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function HomePage() {
+  const { isAuthenticated } = useAuthStore();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (isAuthenticated) router.replace('/dashboard');
+  }, [isAuthenticated, router]);
   return (
     <main className="hero-grid relative isolate min-h-screen overflow-hidden px-6 py-8 md:px-10 md:py-10">
       <div className="absolute inset-x-0 top-0 h-72 bg-gradient-to-b from-white/55 to-transparent" />

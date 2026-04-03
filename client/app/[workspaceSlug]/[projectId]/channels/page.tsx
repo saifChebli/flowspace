@@ -1,13 +1,16 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
 import api from '@/lib/api';
+import CreateChannelModal from '@/components/channels/CreateChannelModal';
 import type { Channel, Project, ProjectMember } from '@/types';
 
 export default function ChannelsPage() {
   const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
+  const [showCreate, setShowCreate] = useState(false);
 
   const { data: channels, isLoading } = useQuery<Channel[]>({
     queryKey: ['channels', projectId],
@@ -76,8 +79,16 @@ export default function ChannelsPage() {
               Organize internal discussion and client-visible updates without mixing approval threads with execution noise.
             </p>
           </div>
-          <div className="rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent">
-            {channels?.length ?? 0} active channels
+          <div className="flex items-center gap-3">
+            <div className="rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent">
+              {channels?.length ?? 0} active channels
+            </div>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="primary-button px-4 py-2 text-sm"
+            >
+              + New channel
+            </button>
           </div>
         </div>
 
@@ -115,10 +126,21 @@ export default function ChannelsPage() {
             </Link>
           ))}
           {channels?.length === 0 && (
-            <p className="text-sm text-muted-foreground">No channels yet.</p>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="flex w-full items-center justify-center rounded-[1.4rem] border-2 border-dashed border-border/60 py-10 text-sm font-medium text-muted-foreground transition hover:border-accent/40 hover:text-accent"
+            >
+              + Create your first channel
+            </button>
           )}
         </div>
       </div>
+
+      <CreateChannelModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        projectId={projectId}
+      />
     </div>
   );
 }

@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Board', href: '/board' },
   { label: 'Channels', href: '/channels' },
   { label: 'Files', href: '/files' },
+  { label: 'Settings', href: '/settings' },
 ];
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {

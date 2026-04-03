@@ -1,10 +1,179 @@
+'use client';
+
+import { useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import api from '@/lib/api';
+
+interface FileRecord {
+  id: string;
+  name: string;
+  mimeType: string;
+  sizeBytes: number;
+  url: string;
+  createdAt: string;
+  uploadedBy: { id: string; name: string; avatarUrl: string | null };
+}
+
+const ICON: Record<string, string> = {
+  'application/pdf': '📄',
+  'image/png': '🖼',
+  'image/jpeg': '🖼',
+  'image/gif': '🖼',
+  'image/webp': '🖼',
+  'video/mp4': '🎬',
+};
+
+function fileIcon(mime: string) {
+  return ICON[mime] ?? '📎';
+}
+
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
 export default function ProjectFilesPage() {
+  const { projectId } = useParams<{ projectId: string }>();
+  const queryClient = useQueryClient();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
+
+  const { data: files, isLoading } = useQuery<FileRecord[]>({
+    queryKey: ['files', projectId],
+    queryFn: () => api.get(`/projects/${projectId}/files`).then((r) => r.data),
+  });
+
+  const download = useMutation({
+    mutationFn: (fileId: string) =>
+      api.get<{ url: string }>(`/projects/${projectId}/files/${fileId}/download`).then((r) => r.data),
+    onSuccess: ({ url }) => window.open(url, '_blank'),
+  });
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploading(true);
+    setUploadError('');
+    try {
+      // Step 1: get presigned URL
+      const { data: presign } = await api.post<{ uploadUrl: string; key: string }>(
+        `/projects/${projectId}/files/presign`,
+        { name: file.name, mimeType: file.type, sizeBytes: file.size }
+      );
+
+      // Step 2: upload directly to S3
+      await fetch(presign.uploadUrl, {
+        method: 'PUT',
+        body: file,
+        headers: { 'Content-Type': file.type },
+      });
+
+      // Step 3: confirm
+      await api.post(`/projects/${projectId}/files/confirm`, {
+        name: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
+        key: presign.key,
+      });
+
+      queryClient.invalidateQueries({ queryKey: ['files', projectId] });
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'Upload failed. Please check your storage configuration.';
+      setUploadError(msg);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  }
+
   return (
-    <div className="p-6">
-      <h2 className="mb-2 text-lg font-semibold">Files</h2>
-      <p className="text-sm text-muted-foreground">
-        File uploads and listing UI will be added here. This route now resolves correctly from the project tabs.
-      </p>
+    <div className="space-y-5">
+      <div className="glass-card rounded-[1.8rem] px-5 py-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Files</p>
+            <h2 className="mt-1 text-xl font-bold">Project files</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Upload and share files with your team and clients.
+            </p>
+          </div>
+          <div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={handleFileChange}
+              accept="image/*,application/pdf,video/mp4,.doc,.docx,.xls,.xlsx,.zip"
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              className="primary-button px-5 py-2.5 text-sm disabled:opacity-60"
+            >
+              {uploading ? 'Uploading…' : '+ Upload file'}
+            </button>
+          </div>
+        </div>
+        {uploadError && (
+          <div className="mt-3 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
+            {uploadError}
+          </div>
+        )}
+      </div>
+
+      {isLoading ? (
+        <div className="grid gap-3">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="h-16 animate-pulse rounded-[1.2rem] bg-muted" />
+          ))}
+        </div>
+      ) : files?.length === 0 ? (
+        <div className="panel-card flex flex-col items-center justify-center rounded-[1.8rem] py-16 text-center">
+          <div className="mb-3 text-4xl">📁</div>
+          <p className="text-sm text-muted-foreground">No files uploaded yet.</p>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="mt-4 secondary-button px-4 py-2 text-sm"
+          >
+            Upload the first file
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {files?.map((f) => (
+            <div
+              key={f.id}
+              className="flex items-center justify-between rounded-[1.4rem] border border-border/80 bg-white/75 px-5 py-4 transition hover:bg-white"
+            >
+              <div className="flex items-center gap-4">
+                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-xl">
+                  {fileIcon(f.mimeType)}
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{f.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    {formatBytes(f.sizeBytes)} · uploaded by {f.uploadedBy.name} ·{' '}
+                    {new Date(f.createdAt).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => download.mutate(f.id)}
+                disabled={download.isPending}
+                className="secondary-button px-3 py-2 text-xs"
+              >
+                Download
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

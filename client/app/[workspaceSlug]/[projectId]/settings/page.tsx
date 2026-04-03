@@ -5,51 +5,48 @@ import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 
-interface WorkspaceMember {
+interface ProjectMember {
   userId: string;
-  role: 'ADMIN' | 'MEMBER';
+  role: 'MEMBER' | 'CLIENT';
   user: { id: string; name: string; email: string; avatarUrl: string | null };
 }
 
-interface WorkspaceDetail {
+interface ProjectDetail {
   id: string;
   name: string;
-  slug: string;
   description: string | null;
-  members: WorkspaceMember[];
+  members: ProjectMember[];
 }
 
-export default function WorkspaceSettingsPage() {
-  const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
+export default function ProjectSettingsPage() {
+  const { workspaceSlug, projectId } = useParams<{ workspaceSlug: string; projectId: string }>();
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<'ADMIN' | 'MEMBER'>('MEMBER');
+  const [inviteRole, setInviteRole] = useState<'MEMBER' | 'CLIENT'>('MEMBER');
   const [inviteMsg, setInviteMsg] = useState('');
 
-  const { data: workspace, isLoading } = useQuery<WorkspaceDetail>({
-    queryKey: ['workspace-detail', workspaceSlug],
-    queryFn: () => api.get(`/workspaces/${workspaceSlug}`).then((r) => r.data),
+  const { data: project, isLoading } = useQuery<ProjectDetail>({
+    queryKey: ['project-settings', workspaceSlug, projectId],
+    queryFn: () =>
+      api.get(`/workspaces/${workspaceSlug}/projects/${projectId}`).then((r) => r.data),
   });
 
   const sendInvite = useMutation({
     mutationFn: () =>
-      api.post(`/workspaces/${workspaceSlug}/invite`, { email: inviteEmail, role: inviteRole }),
+      api.post(`/workspaces/${workspaceSlug}/projects/${projectId}/invite`, {
+        email: inviteEmail,
+        role: inviteRole,
+      }),
     onSuccess: () => {
       setInviteMsg(`Invite sent to ${inviteEmail}`);
       setInviteEmail('');
       setTimeout(() => setInviteMsg(''), 4000);
     },
     onError: (err: unknown) => {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to send invite.';
+      const msg =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
+        'Failed to send invite.';
       setInviteMsg(`Error: ${msg}`);
-    },
-  });
-
-  const removeMember = useMutation({
-    mutationFn: (memberId: string) =>
-      api.delete(`/workspaces/${workspaceSlug}/members/${memberId}`),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['workspace-detail', workspaceSlug] });
     },
   });
 
@@ -58,8 +55,8 @@ export default function WorkspaceSettingsPage() {
   return (
     <div className="mx-auto max-w-2xl space-y-8 p-6">
       <div>
-        <h2 className="text-xl font-bold">Workspace settings</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{workspace?.name}</p>
+        <h2 className="text-xl font-bold">Project settings</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{project?.name}</p>
       </div>
 
       {/* Invite member */}
@@ -77,11 +74,11 @@ export default function WorkspaceSettingsPage() {
           />
           <select
             value={inviteRole}
-            onChange={(e) => setInviteRole(e.target.value as 'ADMIN' | 'MEMBER')}
+            onChange={(e) => setInviteRole(e.target.value as 'MEMBER' | 'CLIENT')}
             className="field-input w-32"
           >
-            <option value="MEMBER">Member</option>
-            <option value="ADMIN">Admin</option>
+            <option value="MEMBER">Team member</option>
+            <option value="CLIENT">Client</option>
           </select>
           <button
             onClick={() => { if (inviteEmail.trim()) sendInvite.mutate(); }}
@@ -92,20 +89,28 @@ export default function WorkspaceSettingsPage() {
           </button>
         </div>
         {inviteMsg && (
-          <p className={`mt-3 text-sm ${inviteMsg.startsWith('Error') ? 'text-destructive' : 'text-accent'}`}>
+          <p
+            className={`mt-3 text-sm ${inviteMsg.startsWith('Error') ? 'text-destructive' : 'text-accent'}`}
+          >
             {inviteMsg}
           </p>
         )}
+        <p className="mt-3 text-xs text-muted-foreground">
+          Clients can only see channels marked as &quot;Client visible&quot;.
+        </p>
       </div>
 
       {/* Members list */}
       <div className="glass-card rounded-[1.6rem] p-5">
         <h3 className="mb-4 text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-          Members ({workspace?.members.length ?? 0})
+          Members ({project?.members.length ?? 0})
         </h3>
         <div className="space-y-3">
-          {workspace?.members.map((m) => (
-            <div key={m.userId} className="flex items-center justify-between rounded-xl border border-border/70 bg-white/60 px-4 py-3">
+          {project?.members.map((m) => (
+            <div
+              key={m.userId}
+              className="flex items-center justify-between rounded-xl border border-border/70 bg-white/60 px-4 py-3"
+            >
               <div className="flex items-center gap-3">
                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-accent-soft text-sm font-bold text-accent">
                   {m.user.name.charAt(0).toUpperCase()}
@@ -115,17 +120,15 @@ export default function WorkspaceSettingsPage() {
                   <p className="text-xs text-muted-foreground">{m.user.email}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  {m.role}
-                </span>
-                <button
-                  onClick={() => { if (confirm(`Remove ${m.user.name}?`)) removeMember.mutate(m.userId); }}
-                  className="text-xs text-destructive/70 transition hover:text-destructive"
-                >
-                  Remove
-                </button>
-              </div>
+              <span
+                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                  m.role === 'CLIENT'
+                    ? 'bg-amber-100 text-amber-700'
+                    : 'bg-muted text-muted-foreground'
+                }`}
+              >
+                {m.role}
+              </span>
             </div>
           ))}
         </div>

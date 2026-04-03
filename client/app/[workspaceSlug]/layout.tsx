@@ -1,14 +1,20 @@
 'use client';
 
 import Link from 'next/link';
+import { useState } from 'react';
 import { useParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { useAuthStore } from '@/stores/authStore';
+import CreateProjectModal from '@/components/projects/CreateProjectModal';
+import NotificationBell from '@/components/ui/NotificationBell';
 import type { Workspace, Project } from '@/types';
 
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const pathname = usePathname();
+  const { user, logout } = useAuthStore();
+  const [showCreateProject, setShowCreateProject] = useState(false);
 
   const { data: workspace } = useQuery<Workspace>({
     queryKey: ['workspace', workspaceSlug],
@@ -23,6 +29,26 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   return (
     <div className="app-shell flex min-h-screen overflow-hidden">
       <aside className="hidden w-[310px] shrink-0 border-r border-border/80 bg-[#f7f0e3]/90 px-5 py-5 lg:flex lg:flex-col">
+        {/* Back to dashboard + user row */}
+        <div className="mb-4 flex items-center justify-between">
+          <Link
+            href="/dashboard"
+            className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground transition hover:text-foreground"
+          >
+            ← All workspaces
+          </Link>
+          <div className="flex items-center gap-2">
+            <NotificationBell />
+            <button
+              onClick={logout}
+              className="text-xs text-muted-foreground transition hover:text-foreground"
+              title={`Sign out (${user?.email ?? ''})`}
+            >
+              Sign out
+            </button>
+          </div>
+        </div>
+
         <div className="rounded-[1.8rem] border border-border/80 bg-white/65 p-5 shadow-[var(--shadow)]">
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
             Workspace
@@ -40,9 +66,18 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               Active projects
             </p>
-            <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-bold text-accent">
-              {projects?.length ?? 0}
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-bold text-accent">
+                {projects?.length ?? 0}
+              </span>
+              <button
+                onClick={() => setShowCreateProject(true)}
+                className="flex h-6 w-6 items-center justify-center rounded-full bg-accent text-white text-xs font-bold transition hover:bg-accent/80"
+                title="New project"
+              >
+                +
+              </button>
+            </div>
           </div>
 
           <nav className="space-y-2 overflow-y-auto pr-1">
@@ -72,6 +107,14 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 </Link>
               );
             })}
+            {projects?.length === 0 && (
+              <button
+                onClick={() => setShowCreateProject(true)}
+                className="w-full rounded-[1.2rem] border-2 border-dashed border-border/60 py-4 text-sm font-medium text-muted-foreground transition hover:border-accent/40 hover:text-accent"
+              >
+                + New project
+              </button>
+            )}
           </nav>
         </div>
 
@@ -95,6 +138,13 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
           {children}
         </div>
       </main>
+
+      <CreateProjectModal
+        open={showCreateProject}
+        onClose={() => setShowCreateProject(false)}
+        workspaceSlug={workspaceSlug}
+      />
     </div>
   );
 }
+
