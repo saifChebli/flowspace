@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import Modal from '@/components/ui/Modal';
+import { toast } from 'sonner';
 import type { Project } from '@/types';
 
 interface Props {
@@ -26,6 +27,7 @@ export default function CreateProjectModal({ open, onClose, workspaceSlug }: Pro
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', workspaceSlug] });
+      toast.success('Project created');
       setName('');
       setDescription('');
       setError('');
@@ -35,6 +37,7 @@ export default function CreateProjectModal({ open, onClose, workspaceSlug }: Pro
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
         'Failed to create project.';
+      toast.error(msg);
       setError(msg);
     },
   });
@@ -53,8 +56,11 @@ export default function CreateProjectModal({ open, onClose, workspaceSlug }: Pro
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Create a delivery space for tasks, files, channels, and project-specific members.
+        </p>
         <div>
-          <label className="mb-2 block text-sm font-medium">Project name *</label>
+          <label className="form-label">Project name</label>
           <input
             type="text"
             required
@@ -67,7 +73,7 @@ export default function CreateProjectModal({ open, onClose, workspaceSlug }: Pro
           />
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium">Description</label>
+          <label className="form-label">Description</label>
           <textarea
             rows={2}
             maxLength={280}

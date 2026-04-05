@@ -9,6 +9,10 @@ router.use(authenticate);
 router.get('/', ctrl.listBoards);
 router.post('/', ctrl.createBoard);
 
+// /api/boards/:boardId
+router.patch('/:boardId', ctrl.updateBoard);
+router.delete('/:boardId', ctrl.deleteBoard);
+
 // /api/boards/:boardId/lists
 router.post('/:boardId/lists', ctrl.createList);
 router.patch('/lists/:listId', ctrl.updateList);

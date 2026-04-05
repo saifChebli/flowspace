@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
+import { LogIn, Eye, MessageSquare } from 'lucide-react';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -19,6 +21,7 @@ export default function LoginPage() {
     setLoading(true);
     try {
       await login(email, password);
+      toast.success('Welcome back!');
       router.push('/dashboard');
     } catch (err: unknown) {
       const msg =
@@ -34,7 +37,7 @@ export default function LoginPage() {
     <div className="hero-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 md:p-8">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(183,121,31,0.18),transparent_25%),radial-gradient(circle_at_bottom_right,rgba(15,118,110,0.18),transparent_24%)]" />
       <div className="relative grid w-full max-w-6xl gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-        <section className="hidden rounded-4xl border border-border/80 bg-white/55 p-8 shadow-(--shadow) backdrop-blur xl:flex xl:flex-col xl:justify-between">
+        <section className="hidden rounded-2xl border border-border/80 bg-white/55 p-8 shadow-lg backdrop-blur xl:flex xl:flex-col xl:justify-between">
           <div>
             <div className="eyebrow">Operator login</div>
             <h1 className="mt-6 text-5xl font-bold leading-[0.95] tracking-[-0.04em] text-foreground">
@@ -55,7 +58,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <div className="glass-card w-full rounded-4xl p-7 md:p-10">
+        <div className="glass-card w-full rounded-2xl p-7 md:p-10">
           <div className="mb-8">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
               Sign in
@@ -103,7 +106,8 @@ export default function LoginPage() {
               />
             </div>
 
-            <button type="submit" disabled={loading} className="primary-button w-full px-4 py-3.5 text-sm disabled:opacity-60">
+            <button type="submit" disabled={loading} className="primary-button flex w-full items-center justify-center gap-2 px-4 py-3 text-sm disabled:opacity-60">
+              <LogIn className="h-4 w-4" />
               {loading ? 'Signing in…' : 'Enter workspace'}
             </button>
           </form>
@@ -127,7 +131,7 @@ export default function LoginPage() {
 
 function AuthFeature({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[1.4rem] border border-border/80 bg-white/60 p-4">
+    <div className="rounded-xl border border-border/80 bg-white/60 p-4">
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-2 text-sm leading-6 text-ink-soft">{children}</p>
     </div>

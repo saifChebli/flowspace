@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import { Hash, Lock, Eye } from 'lucide-react';
 import api from '@/lib/api';
 import Modal from '@/components/ui/Modal';
 import type { Channel } from '@/types';
@@ -28,6 +30,7 @@ export default function CreateChannelModal({ open, onClose, projectId }: Props) 
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['channels', projectId] });
+      toast.success('Channel created');
       setName('');
       setType('PUBLIC');
       setDescription('');
@@ -39,6 +42,7 @@ export default function CreateChannelModal({ open, onClose, projectId }: Props) 
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
         'Failed to create channel.';
       setError(msg);
+      toast.error(msg);
     },
   });
 
@@ -56,8 +60,11 @@ export default function CreateChannelModal({ open, onClose, projectId }: Props) 
         </div>
       )}
       <form onSubmit={handleSubmit} className="space-y-4">
+        <p className="text-sm leading-6 text-muted-foreground">
+          Keep delivery communication structured with channels for internal work, private ops, or client-visible updates.
+        </p>
         <div>
-          <label className="mb-2 block text-sm font-medium">Channel name *</label>
+          <label className="form-label">Channel name</label>
           <input
             type="text"
             required
@@ -71,26 +78,31 @@ export default function CreateChannelModal({ open, onClose, projectId }: Props) 
           <p className="mt-1 text-xs text-muted-foreground">Lowercase, alphanumeric and hyphens only.</p>
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium">Visibility</label>
+          <label className="form-label">Visibility</label>
           <div className="grid grid-cols-3 gap-2">
-            {(['PUBLIC', 'PRIVATE', 'CLIENT_VISIBLE'] as const).map((t) => (
+            {([
+              { value: 'PUBLIC' as const, label: 'Public', icon: Hash },
+              { value: 'PRIVATE' as const, label: 'Private', icon: Lock },
+              { value: 'CLIENT_VISIBLE' as const, label: 'Client', icon: Eye },
+            ]).map(({ value, label, icon: Icon }) => (
               <button
-                key={t}
+                key={value}
                 type="button"
-                onClick={() => setType(t)}
-                className={`rounded-xl border px-3 py-2.5 text-xs font-semibold transition ${
-                  type === t
+                onClick={() => setType(value)}
+                className={`flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition-all ${
+                  type === value
                     ? 'border-accent/30 bg-accent-soft text-accent'
-                    : 'border-border/70 bg-white/65 text-muted-foreground hover:text-foreground'
+                    : 'border-border/70 bg-card/80 text-muted-foreground hover:bg-card hover:text-foreground'
                 }`}
               >
-                {t === 'CLIENT_VISIBLE' ? 'Client visible' : t.charAt(0) + t.slice(1).toLowerCase()}
+                <Icon className="h-3.5 w-3.5" />
+                {label}
               </button>
             ))}
           </div>
         </div>
         <div>
-          <label className="mb-2 block text-sm font-medium">Description</label>
+          <label className="form-label">Description</label>
           <textarea
             rows={2}
             maxLength={300}

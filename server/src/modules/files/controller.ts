@@ -1,7 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
-import { presignUploadSchema } from './schema';
-import { z } from 'zod';
+import { presignUploadSchema, confirmUploadSchema } from './schema';
 
 export async function presign(req: Request, res: Response, next: NextFunction) {
   try {
@@ -12,7 +11,7 @@ export async function presign(req: Request, res: Response, next: NextFunction) {
 
 export async function confirm(req: Request, res: Response, next: NextFunction) {
   try {
-    const input = presignUploadSchema.extend({ key: z.string().min(1) }).parse(req.body);
+    const input = confirmUploadSchema.parse(req.body);
     res.status(201).json(await svc.confirmUpload(req.params.projectId, req.user!.id, input));
   } catch (err) { next(err); }
 }

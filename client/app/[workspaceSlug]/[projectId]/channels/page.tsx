@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import Link from 'next/link';
+import { Hash, Plus, Lock, Eye, ChevronRight } from 'lucide-react';
 import api from '@/lib/api';
 import CreateChannelModal from '@/components/channels/CreateChannelModal';
 import type { Channel, Project, ProjectMember } from '@/types';
@@ -28,109 +29,114 @@ export default function ChannelsPage() {
   if (isLoading) return <div className="p-6 text-muted-foreground">Loading channels…</div>;
 
   return (
-    <div className="grid min-h-[72vh] gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-      <aside className="overflow-hidden rounded-[1.6rem] border border-border/80 bg-[#20252d] text-white shadow-[0_18px_40px_rgba(23,32,51,0.12)]">
-        <div className="border-b border-white/10 px-5 py-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
-            Project channels
+    <div className="grid min-h-[72vh] gap-3 xl:grid-cols-[220px_minmax(0,1fr)]">
+      <aside className="hidden overflow-hidden rounded-xl border border-border/80 bg-[#1e2330] text-white shadow-sm xl:flex xl:flex-col">
+        <div className="border-b border-white/8 px-4 py-4">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">
+            Channels
           </p>
-          <h2 className="mt-2 text-base font-semibold text-white">{project?.name ?? 'Workspace chat'}</h2>
-          <p className="mt-2 text-sm leading-6 text-white/62">
-            Fast coordination for delivery, approvals, and internal handoff.
-          </p>
+          <h2 className="mt-1.5 truncate text-sm font-semibold text-white">{project?.name ?? 'Project'}</h2>
         </div>
 
-        <div className="px-3 py-4">
-          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-            Channels
-          </div>
-          <div className="space-y-1">
+        <div className="flex-1 overflow-y-auto px-2 py-2">
+          <div className="space-y-0.5">
             {channels?.map((channel) => (
               <Link
                 key={channel.id}
                 href={`/${workspaceSlug}/${projectId}/channels/${channel.id}`}
-                className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-white/78 transition hover:bg-white/8 hover:text-white"
+                className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-white/65 transition-colors hover:bg-white/6 hover:text-white/90"
               >
-                <span className="font-bold text-white/55">#</span>
-                <span className="truncate">{channel.name}</span>
+                <Hash className="h-3.5 w-3.5 shrink-0 text-white/40" />
+                <span className="flex-1 truncate text-[13px]">{channel.name}</span>
+                {(channel.unreadCount ?? 0) > 0 && (
+                  <span className="flex h-4.5 min-w-[18px] items-center justify-center rounded-full bg-accent px-1 text-[9px] font-bold text-white">
+                    {channel.unreadCount}
+                  </span>
+                )}
               </Link>
             ))}
           </div>
 
-          <div className="mt-6 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-            Members
-          </div>
-          <div className="space-y-1.5">
-            {(project?.members ?? []).slice(0, 8).map((member) => (
-              <MemberRailItem key={member.userId} member={member} />
-            ))}
+          <div className="mt-4 border-t border-white/8 pt-3">
+            <p className="mb-2 px-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/35">
+              Members
+            </p>
+            <div className="space-y-0.5">
+              {(project?.members ?? []).slice(0, 8).map((member) => (
+                <MemberRailItem key={member.userId} member={member} />
+              ))}
+            </div>
           </div>
         </div>
       </aside>
 
-      <div className="panel-card rounded-4xl p-6 md:p-7">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+      <div className="panel-card rounded-xl p-5 md:p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Channels</p>
-            <h2 className="mt-2 text-[1.125rem] font-bold tracking-tight text-foreground md:text-[1.375rem]">
-              Conversation architecture
+            <h2 className="text-lg font-bold tracking-tight text-foreground">
+              Channels
             </h2>
-            <p className="mt-2 text-sm leading-6 text-muted-foreground">
-              Organize internal discussion and client-visible updates without mixing approval threads with execution noise.
+            <p className="mt-1 text-sm text-muted-foreground">
+              Organize internal discussion and client-visible updates.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="rounded-full bg-accent-soft px-4 py-2 text-sm font-semibold text-accent">
-              {channels?.length ?? 0} active channels
-            </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-md bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent">
+              {channels?.length ?? 0} channels
+            </span>
             <button
               onClick={() => setShowCreate(true)}
-              className="primary-button px-4 py-2 text-sm"
+              className="primary-button flex items-center gap-1.5 px-3.5 py-2 text-sm"
             >
-              + New channel
+              <Plus className="h-3.5 w-3.5" />
+              New channel
             </button>
           </div>
         </div>
 
-        <div className="mt-6 grid gap-3">
+        <div className="mt-5 grid gap-2">
           {channels?.map((c) => (
             <Link
               key={c.id}
               href={`/${workspaceSlug}/${projectId}/channels/${c.id}`}
-              className="group flex items-center justify-between rounded-[1.4rem] border border-border/80 bg-white/75 px-5 py-4 transition hover:-translate-y-0.5 hover:border-accent/20 hover:bg-white"
+              className="group flex items-center justify-between rounded-xl border border-border/70 bg-white/75 px-4 py-3.5 transition-all hover:border-accent/20 hover:bg-white hover:shadow-sm"
             >
-              <div className="flex items-start gap-4">
-                <div className="mt-0.5 flex h-11 w-11 items-center justify-center rounded-2xl bg-accent-soft text-sm font-bold text-accent">
-                  #
+              <div className="flex items-center gap-3">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+                  c.type === 'PRIVATE' ? 'bg-amber-50' : c.type === 'CLIENT_VISIBLE' ? 'bg-indigo-50' : 'bg-accent-soft'
+                }`}>
+                  {c.type === 'PRIVATE' ? <Lock className="h-4 w-4 text-amber-600" /> : c.type === 'CLIENT_VISIBLE' ? <Eye className="h-4 w-4 text-indigo-500" /> : <Hash className="h-4 w-4 text-accent" />}
                 </div>
                 <div>
                   <span className="text-sm font-semibold text-foreground">{c.name}</span>
-                  <p className="mt-1 text-xs uppercase tracking-[0.16em] text-muted-foreground">
-                    {c.type.replace('_', ' ')}
-                  </p>
                   {c.description && (
-                    <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                    <p className="mt-0.5 max-w-xl text-xs text-muted-foreground line-clamp-1">
                       {c.description}
                     </p>
                   )}
                 </div>
               </div>
-              <div className="text-right">
-                <span className="rounded-full bg-muted px-3 py-1 text-xs font-semibold text-foreground">
-                  Open
-                </span>
-                <p className="mt-2 text-xs text-muted-foreground group-hover:text-accent">
-                  Enter channel
-                </p>
+              <div className="flex items-center gap-2">
+                {(c.unreadCount ?? 0) > 0 ? (
+                  <span className="flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-bold text-white">
+                    {c.unreadCount}
+                  </span>
+                ) : (
+                  <span className="rounded-md bg-muted/60 px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {c.type === 'PRIVATE' ? 'Private' : c.type === 'CLIENT_VISIBLE' ? 'Client' : 'Public'}
+                  </span>
+                )}
+                <ChevronRight className="h-4 w-4 text-muted-foreground/50 transition-colors group-hover:text-accent" />
               </div>
             </Link>
           ))}
           {channels?.length === 0 && (
             <button
               onClick={() => setShowCreate(true)}
-              className="flex w-full items-center justify-center rounded-[1.4rem] border-2 border-dashed border-border/60 py-10 text-sm font-medium text-muted-foreground transition hover:border-accent/40 hover:text-accent"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 py-10 text-sm font-medium text-muted-foreground transition hover:border-accent/40 hover:text-accent"
             >
-              + Create your first channel
+              <Plus className="h-4 w-4" />
+              Create your first channel
             </button>
           )}
         </div>
@@ -147,13 +153,12 @@ export default function ChannelsPage() {
 
 function MemberRailItem({ member }: { member: ProjectMember }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm text-white/80 hover:bg-white/6">
-      <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/12 text-xs font-semibold text-white">
+    <div className="flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-sm text-white/75 transition-colors hover:bg-white/6">
+      <div className="flex h-6 w-6 items-center justify-center rounded-md bg-white/10 text-[10px] font-semibold text-white/80">
         {member.user.name.charAt(0).toUpperCase()}
       </div>
       <div className="min-w-0">
-        <div className="truncate text-sm font-medium text-white">{member.user.name}</div>
-        <div className="text-[11px] uppercase tracking-[0.14em] text-white/45">{member.role}</div>
+        <div className="truncate text-[13px] font-medium text-white/85">{member.user.name}</div>
       </div>
     </div>
   );

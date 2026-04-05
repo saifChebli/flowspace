@@ -1,15 +1,25 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
-import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput } from './schema';
+import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput, UpdateProjectMemberRoleInput } from './schema';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { env } from '../../config/env';
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+async function getWorkspaceBySlug(slug: string) {
+  const ws = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!ws) throw new AppError(404, 'Workspace not found');
+  return ws;
+}
+
+function isWorkspaceAdmin(workspaceMembers: { userId: string; role: string }[], userId: string): boolean {
+  return workspaceMembers.some((m) => m.userId === userId && m.role === 'ADMIN');
+}
+
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
+
 export async function createProject(workspaceSlug: string, userId: string, input: CreateProjectInput) {
-  const workspace = await prisma.workspace.findUnique({
-    where: { slug: workspaceSlug },
-    include: { members: true },
-  });
-  if (!workspace) throw new AppError(404, 'Workspace not found');
+  const workspace = await getWorkspaceBySlug(workspaceSlug);
   assertWorkspaceMember(workspace.members, userId);
 
   return prisma.project.create({
@@ -32,6 +42,20 @@ export async function getProjects(workspaceSlug: string, userId: string) {
       archived: false,
     },
     include: { _count: { select: { members: true, channels: true, boards: true } } },
+    orderBy: { createdAt: 'desc' },
+  });
+}
+
+export async function getArchivedProjects(workspaceSlug: string, userId: string) {
+  const workspace = await getWorkspaceBySlug(workspaceSlug);
+  assertWorkspaceMember(workspace.members, userId);
+
+  return prisma.project.findMany({
+    where: {
+      workspaceId: workspace.id,
+      archived: true,
+    },
+    include: { _count: { select: { members: true } } },
     orderBy: { createdAt: 'desc' },
   });
 }
@@ -59,19 +83,95 @@ export async function updateProject(projectId: string, userId: string, input: Up
 }
 
 export async function archiveProject(projectId: string, userId: string) {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { members: true } });
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true, workspace: { include: { members: true } } },
+  });
   if (!project) throw new AppError(404, 'Project not found');
-  assertProjectMember(project.members, userId);
+
+  // Only workspace admins can archive
+  if (!isWorkspaceAdmin(project.workspace.members, userId)) {
+    throw new AppError(403, 'Only workspace admins can archive projects');
+  }
 
   return prisma.project.update({ where: { id: projectId }, data: { archived: true } });
 }
 
-export async function inviteProjectMember(projectId: string, inviterId: string, input: InviteProjectMemberInput) {
-  const project = await prisma.project.findUnique({ where: { id: projectId }, include: { members: true } });
+export async function unarchiveProject(projectId: string, userId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { workspace: { include: { members: true } } },
+  });
   if (!project) throw new AppError(404, 'Project not found');
 
-  const inviterMember = project.members.find((m) => m.userId === inviterId && m.role === 'MEMBER');
-  if (!inviterMember) throw new AppError(403, 'Only project members can invite');
+  if (!isWorkspaceAdmin(project.workspace.members, userId)) {
+    throw new AppError(403, 'Only workspace admins can unarchive projects');
+  }
+
+  return prisma.project.update({ where: { id: projectId }, data: { archived: false } });
+}
+
+// ─── Members ──────────────────────────────────────────────────────────────────
+
+export async function removeProjectMember(projectId: string, actorId: string, memberId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true, workspace: { include: { members: true } } },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  // Allow workspace admins or project MEMBERs (not CLIENTs)
+  const isWsAdmin = isWorkspaceAdmin(project.workspace.members, actorId);
+  const isProjectMember = project.members.some((m) => m.userId === actorId && m.role === 'MEMBER');
+  if (!isWsAdmin && !isProjectMember) throw new AppError(403, 'Not authorized to remove members');
+
+  if (actorId === memberId) throw new AppError(400, 'Cannot remove yourself');
+
+  const target = project.members.find((m) => m.userId === memberId);
+  if (!target) throw new AppError(404, 'Member not found in project');
+
+  await prisma.projectMember.delete({
+    where: { projectId_userId: { projectId, userId: memberId } },
+  });
+
+  return { message: 'Member removed' };
+}
+
+export async function updateProjectMemberRole(projectId: string, actorId: string, memberId: string, input: UpdateProjectMemberRoleInput) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true, workspace: { include: { members: true } } },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  const isWsAdmin = isWorkspaceAdmin(project.workspace.members, actorId);
+  const isProjectMember = project.members.some((m) => m.userId === actorId && m.role === 'MEMBER');
+  if (!isWsAdmin && !isProjectMember) throw new AppError(403, 'Not authorized to change roles');
+
+  const target = project.members.find((m) => m.userId === memberId);
+  if (!target) throw new AppError(404, 'Member not found in project');
+
+  await prisma.projectMember.update({
+    where: { projectId_userId: { projectId, userId: memberId } },
+    data: { role: input.role },
+  });
+
+  return { message: 'Role updated' };
+}
+
+// ─── Invites ──────────────────────────────────────────────────────────────────
+
+export async function inviteProjectMember(projectId: string, inviterId: string, input: InviteProjectMemberInput) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true, workspace: { include: { members: true } } },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  // Allow workspace admins OR project MEMBERs (not CLIENTs)
+  const isWsAdmin = isWorkspaceAdmin(project.workspace.members, inviterId);
+  const isProjectMember = project.members.some((m) => m.userId === inviterId && m.role === 'MEMBER');
+  if (!isWsAdmin && !isProjectMember) throw new AppError(403, 'Not authorized to invite');
 
   const inviter = await prisma.user.findUnique({ where: { id: inviterId }, select: { name: true } });
 
@@ -88,12 +188,11 @@ export async function inviteProjectMember(projectId: string, inviterId: string, 
     },
   });
 
-  const workspace = await prisma.workspace.findUnique({ where: { id: project.workspaceId }, select: { name: true } });
   const inviteUrl = `${env.CLIENT_URL}/invites/${invite.token}`;
   await sendEmail({
     to: input.email,
     subject: `You're invited to ${project.name} on CollabSpace`,
-    html: inviteEmailTemplate(inviter!.name, workspace!.name, inviteUrl),
+    html: inviteEmailTemplate(inviter!.name, project.workspace.name, inviteUrl),
   });
 
   return { message: 'Invite sent' };
@@ -126,6 +225,28 @@ export async function acceptProjectInvite(token: string, userId: string) {
   ]);
 
   return { projectId: invite.projectId };
+}
+
+export async function getPendingProjectInvites(projectId: string, userId: string) {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: { members: true, workspace: { include: { members: true } } },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  const isWsAdmin = isWorkspaceAdmin(project.workspace.members, userId);
+  const isProjectMember = project.members.some((m) => m.userId === userId && m.role === 'MEMBER');
+  if (!isWsAdmin && !isProjectMember) throw new AppError(403, 'Not authorized');
+
+  return prisma.inviteToken.findMany({
+    where: {
+      projectId,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 // ─── Guards ───────────────────────────────────────────────────────────────────

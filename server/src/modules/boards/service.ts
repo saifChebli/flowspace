@@ -1,6 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
-import type { CreateBoardInput, CreateListInput, UpdateListInput } from './schema';
+import type { CreateBoardInput, UpdateBoardInput, CreateListInput, UpdateListInput } from './schema';
 
 export async function createBoard(projectId: string, userId: string, input: CreateBoardInput) {
   await assertProjectMember(projectId, userId);
@@ -25,6 +25,21 @@ export async function getBoards(projectId: string, userId: string) {
       },
     },
   });
+}
+
+export async function updateBoard(boardId: string, userId: string, input: UpdateBoardInput) {
+  const board = await prisma.board.findUnique({ where: { id: boardId } });
+  if (!board) throw new AppError(404, 'Board not found');
+  await assertProjectMember(board.projectId, userId);
+  return prisma.board.update({ where: { id: boardId }, data: input });
+}
+
+export async function deleteBoard(boardId: string, userId: string) {
+  const board = await prisma.board.findUnique({ where: { id: boardId } });
+  if (!board) throw new AppError(404, 'Board not found');
+  await assertProjectMember(board.projectId, userId);
+  await prisma.board.delete({ where: { id: boardId } });
+  return { message: 'Board deleted' };
 }
 
 export async function createList(boardId: string, userId: string, input: CreateListInput) {

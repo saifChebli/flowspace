@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { io } from '../../server';
 import type { SendMessageInput, EditMessageInput } from './schema';
 
 export async function sendMessage(channelId: string, authorId: string, input: SendMessageInput) {
@@ -16,11 +17,20 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
     throw new AppError(403, 'Clients can only post in client-visible channels');
   }
 
+  // Private channels: must be a channel member
+  if (channel.type === 'PRIVATE') {
+    const channelMember = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId: authorId } },
+    });
+    if (!channelMember) throw new AppError(403, 'Not a member of this private channel');
+  }
+
   const message = await prisma.message.create({
     data: {
       channelId,
       authorId,
       body: input.body,
+      parentId: input.parentId ?? null,
       mentions: input.mentionedUserIds?.length
         ? { createMany: { data: input.mentionedUserIds.map((userId) => ({ userId })) } }
         : undefined,
@@ -31,6 +41,7 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
     include: {
       author: { select: { id: true, name: true, avatarUrl: true } },
       attachments: { include: { file: true } },
+      _count: { select: { replies: true } },
     },
   });
 
@@ -44,6 +55,9 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
         meta: { channelId, messageId: message.id },
       })),
     });
+    for (const uid of input.mentionedUserIds) {
+      io.to(`user:${uid}`).emit('notification:new');
+    }
   }
 
   return message;
@@ -66,14 +80,23 @@ export async function listMessages(
     throw new AppError(403, 'Access denied');
   }
 
+  // Private channels: must be a channel member
+  if (channel.type === 'PRIVATE') {
+    const channelMember = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId } },
+    });
+    if (!channelMember) throw new AppError(403, 'Not a member of this private channel');
+  }
+
   const messages = await prisma.message.findMany({
-    where: { channelId, deletedAt: null },
+    where: { channelId, deletedAt: null, parentId: null },
     take: limit,
     ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
     orderBy: { createdAt: 'desc' },
     include: {
       author: { select: { id: true, name: true, avatarUrl: true } },
       attachments: { include: { file: true } },
+      _count: { select: { replies: true } },
     },
   });
 
@@ -92,6 +115,31 @@ export async function editMessage(messageId: string, userId: string, input: Edit
     where: { id: messageId },
     data: { body: input.body, editedAt: new Date() },
   });
+}
+
+export async function listThreadReplies(parentId: string, userId: string) {
+  const parent = await prisma.message.findUnique({
+    where: { id: parentId },
+    include: { channel: true },
+  });
+  if (!parent) throw new AppError(404, 'Message not found');
+
+  // Verify access
+  const member = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: parent.channel.projectId, userId } },
+  });
+  if (!member) throw new AppError(403, 'Not a project member');
+
+  const replies = await prisma.message.findMany({
+    where: { parentId, deletedAt: null },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      author: { select: { id: true, name: true, avatarUrl: true } },
+      _count: { select: { replies: true } },
+    },
+  });
+
+  return { replies, parent };
 }
 
 export async function deleteMessage(messageId: string, userId: string) {

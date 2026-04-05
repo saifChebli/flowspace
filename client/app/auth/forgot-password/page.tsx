@@ -31,7 +31,7 @@ export default function ForgotPasswordPage() {
   return (
     <div className="hero-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 md:p-8">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(183,121,31,0.18),transparent_22%),radial-gradient(circle_at_82%_78%,rgba(15,118,110,0.16),transparent_24%)]" />
-      <div className="glass-card relative w-full max-w-xl rounded-4xl p-8 md:p-10">
+      <div className="glass-card relative w-full max-w-xl rounded-2xl p-8 md:p-10">
         <div className="eyebrow">Recovery</div>
         <h2 className="mb-3 mt-5 text-3xl font-bold">Recover workspace access</h2>
         <p className="mb-6 text-sm leading-6 text-muted-foreground">

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
+import { toast } from 'sonner';
+import { UserPlus } from 'lucide-react';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -20,6 +22,7 @@ export default function RegisterPage() {
     setLoading(true);
     try {
       await api.post('/auth/register', { name, email, password });
+      toast.success('Account created! Check your email.');
       setSuccess(true);
     } catch (err: unknown) {
       const msg =
@@ -34,7 +37,7 @@ export default function RegisterPage() {
   if (success) {
     return (
       <div className="hero-grid flex min-h-screen items-center justify-center p-4 md:p-8">
-        <div className="glass-card w-full max-w-lg rounded-[2rem] p-8 text-center md:p-10">
+        <div className="glass-card w-full max-w-lg rounded-2xl p-8 text-center md:p-10">
           <div className="eyebrow mx-auto w-fit">Almost there</div>
           <h2 className="mb-3 mt-5 text-3xl font-bold">Check your inbox</h2>
           <p className="mb-6 text-base leading-7 text-muted-foreground">
@@ -56,7 +59,7 @@ export default function RegisterPage() {
     <div className="hero-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 md:p-8">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_15%,rgba(183,121,31,0.18),transparent_24%),radial-gradient(circle_at_85%_75%,rgba(15,118,110,0.16),transparent_24%)]" />
       <div className="relative grid w-full max-w-6xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
-        <section className="hidden rounded-[2rem] border border-border/80 bg-white/55 p-8 shadow-[var(--shadow)] backdrop-blur xl:flex xl:flex-col xl:justify-between">
+        <section className="hidden rounded-2xl border border-border/80 bg-white/55 p-8 shadow-lg backdrop-blur xl:flex xl:flex-col xl:justify-between">
           <div>
             <div className="eyebrow">Create workspace</div>
             <h1 className="mt-6 text-5xl font-bold leading-[0.95] tracking-[-0.04em]">
@@ -77,7 +80,7 @@ export default function RegisterPage() {
           </div>
         </section>
 
-        <div className="glass-card w-full rounded-[2rem] p-7 md:p-10">
+        <div className="glass-card w-full rounded-2xl p-7 md:p-10">
           <div className="mb-8">
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
               New account
@@ -143,7 +146,8 @@ export default function RegisterPage() {
               </p>
             </div>
 
-            <button type="submit" disabled={loading} className="primary-button w-full px-4 py-3.5 text-sm disabled:opacity-60">
+            <button type="submit" disabled={loading} className="primary-button flex w-full items-center justify-center gap-2 px-4 py-3 text-sm disabled:opacity-60">
+              <UserPlus className="h-4 w-4" />
               {loading ? 'Creating account…' : 'Create account'}
             </button>
           </form>
@@ -162,7 +166,7 @@ export default function RegisterPage() {
 
 function AuthFeature({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-[1.4rem] border border-border/80 bg-white/60 p-4">
+    <div className="rounded-xl border border-border/80 bg-white/60 p-4">
       <p className="text-sm font-semibold">{title}</p>
       <p className="mt-2 text-sm leading-6 text-ink-soft">{children}</p>
     </div>

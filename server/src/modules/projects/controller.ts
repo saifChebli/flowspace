@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
-import { createProjectSchema, updateProjectSchema, inviteProjectMemberSchema } from './schema';
+import { createProjectSchema, updateProjectSchema, inviteProjectMemberSchema, updateProjectMemberRoleSchema } from './schema';
 
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
@@ -13,6 +13,13 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await svc.getProjects(req.params.workspaceSlug, req.user!.id);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function listArchived(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.getArchivedProjects(req.params.workspaceSlug, req.user!.id);
     res.json(result);
   } catch (err) { next(err); }
 }
@@ -39,6 +46,13 @@ export async function archive(req: Request, res: Response, next: NextFunction) {
   } catch (err) { next(err); }
 }
 
+export async function unarchive(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.unarchiveProject(req.params.projectId, req.user!.id);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
 export async function invite(req: Request, res: Response, next: NextFunction) {
   try {
     const input = inviteProjectMemberSchema.parse(req.body);
@@ -50,6 +64,28 @@ export async function invite(req: Request, res: Response, next: NextFunction) {
 export async function acceptInvite(req: Request, res: Response, next: NextFunction) {
   try {
     const result = await svc.acceptProjectInvite(req.params.token, req.user!.id);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function removeMember(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.removeProjectMember(req.params.projectId, req.user!.id, req.params.memberId);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = updateProjectMemberRoleSchema.parse(req.body);
+    const result = await svc.updateProjectMemberRole(req.params.projectId, req.user!.id, req.params.memberId, input);
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function listInvites(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await svc.getPendingProjectInvites(req.params.projectId, req.user!.id);
     res.json(result);
   } catch (err) { next(err); }
 }

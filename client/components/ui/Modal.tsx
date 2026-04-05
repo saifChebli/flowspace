@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
+import { X } from 'lucide-react';
 
 interface ModalProps {
   open: boolean;
@@ -33,29 +34,29 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'md' 
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+        className="absolute inset-0 bg-foreground/25 backdrop-blur-sm"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Panel */}
       <div
-        className={`relative w-full ${widths[maxWidth]} rounded-[1.8rem] border border-border/80 bg-white shadow-[0_24px_64px_rgba(15,23,42,0.18)]`}
+        className={`glass-card relative w-full ${widths[maxWidth]} rounded-2xl shadow-lg animate-in fade-in-0 zoom-in-95`}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border/70 px-6 py-5">
+        <div className="flex items-center justify-between border-b border-border/70 px-5 py-4">
           <h2 className="text-base font-semibold text-foreground">{title}</h2>
           <button
             onClick={onClose}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             aria-label="Close"
           >
-            ✕
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Body */}
-        <div className="px-6 py-5">{children}</div>
+        <div className="px-5 py-4">{children}</div>
       </div>
     </div>
   );

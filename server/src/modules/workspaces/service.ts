@@ -2,15 +2,43 @@ import { prisma } from '../../lib/prisma';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { AppError } from '../../middleware/errorHandler';
 import { env } from '../../config/env';
-import type { CreateWorkspaceInput, UpdateWorkspaceInput, InviteMemberInput } from './schema';
+import type { CreateWorkspaceInput, UpdateWorkspaceInput, InviteMemberInput, UpdateMemberRoleInput } from './schema';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
+async function generateUniqueSlug(base: string): Promise<string> {
+  let slug = slugify(base);
+  if (slug.length < 2) slug = 'workspace';
+  let candidate = slug;
+  let suffix = 2;
+  while (await prisma.workspace.findUnique({ where: { slug: candidate } })) {
+    candidate = `${slug}-${suffix}`;
+    suffix++;
+  }
+  return candidate;
+}
 
 export async function createWorkspace(userId: string, input: CreateWorkspaceInput) {
-  const existing = await prisma.workspace.findUnique({ where: { slug: input.slug } });
-  if (existing) throw new AppError(409, 'Workspace slug already taken');
+  const slug = input.slug ?? await generateUniqueSlug(input.name);
+
+  if (input.slug) {
+    const existing = await prisma.workspace.findUnique({ where: { slug } });
+    if (existing) throw new AppError(409, 'Workspace slug already taken');
+  }
 
   return prisma.workspace.create({
     data: {
-      ...input,
+      name: input.name,
+      slug,
+      description: input.description,
       members: { create: { userId, role: 'ADMIN' } },
     },
     include: { members: { include: { user: { select: { id: true, name: true, email: true } } } } },
@@ -131,6 +159,43 @@ export async function removeMember(slug: string, adminId: string, memberId: stri
   });
 
   return { message: 'Member removed' };
+}
+
+export async function updateMemberRole(slug: string, adminId: string, memberId: string, input: UpdateMemberRoleInput) {
+  const workspace = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  assertAdmin(workspace.members, adminId);
+
+  if (adminId === memberId && input.role !== 'ADMIN') {
+    const adminCount = workspace.members.filter((m) => m.role === 'ADMIN').length;
+    if (adminCount <= 1) throw new AppError(400, 'Cannot demote the last admin');
+  }
+
+  const target = workspace.members.find((m) => m.userId === memberId);
+  if (!target) throw new AppError(404, 'Member not found');
+
+  await prisma.workspaceMember.update({
+    where: { workspaceId_userId: { workspaceId: workspace.id, userId: memberId } },
+    data: { role: input.role },
+  });
+
+  return { message: 'Role updated' };
+}
+
+export async function getPendingInvites(slug: string, userId: string) {
+  const workspace = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  assertAdmin(workspace.members, userId);
+
+  return prisma.inviteToken.findMany({
+    where: {
+      workspaceId: workspace.id,
+      acceptedAt: null,
+      expiresAt: { gt: new Date() },
+    },
+    select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  });
 }
 
 // ─── Guards ───────────────────────────────────────────────────────────────────

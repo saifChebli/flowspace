@@ -69,11 +69,15 @@ model User {
   sentMessages      Message[]
   taskAssignees     TaskAssignee[]
   taskComments      TaskComment[]
+  taskTimeEntries   TaskTimeEntry[]
   uploadedFiles     File[]
   notifications     Notification[]     @relation("NotificationRecipient")
   actorNotifications Notification[]    @relation("NotificationActor")
   inviteTokens      InviteToken[]
   refreshTokens     RefreshToken[]
+  channelReads      ChannelRead[]
+  channelMembers    ChannelMember[]
+  portalSessions    PortalSession[]
 
   @@map("users")
 }
@@ -125,20 +129,22 @@ model WorkspaceMember {
 // ─── Project ──────────────────────────────────────────────────────────────────
 
 model Project {
-  id          String   @id @default(cuid())
-  workspaceId String
-  name        String
-  description String?
-  archived    Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                String   @id @default(cuid())
+  workspaceId       String
+  name              String
+  description       String?
+  archived          Boolean  @default(false)
+  clientPortalToken String?  @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  workspace    Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  members      ProjectMember[]
-  channels     Channel[]
-  boards       Board[]
-  files        File[]
-  inviteTokens InviteToken[]
+  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members         ProjectMember[]
+  channels        Channel[]
+  boards          Board[]
+  files           File[]
+  inviteTokens    InviteToken[]
+  portalSessions  PortalSession[]
 
   @@map("projects")
 }
@@ -154,6 +160,7 @@ model ProjectMember {
   user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([projectId, userId])
+  @@index([userId])
   @@map("project_members")
 }
 
@@ -168,11 +175,39 @@ model Channel {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  project  Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
   messages Message[]
+  reads    ChannelRead[]
+  members  ChannelMember[]
 
   @@unique([projectId, name])
   @@map("channels")
+}
+
+model ChannelMember {
+  id        String   @id @default(cuid())
+  channelId String
+  userId    String
+  joinedAt  DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_members")
+}
+
+model ChannelRead {
+  id         String   @id @default(cuid())
+  channelId  String
+  userId     String
+  lastReadAt DateTime @default(now())
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@map("channel_reads")
 }
 
 model Message {
@@ -180,12 +215,15 @@ model Message {
   channelId   String
   authorId    String
   body        String
+  parentId    String?
   editedAt    DateTime?
   deletedAt   DateTime?
   createdAt   DateTime @default(now())
 
   channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
   author      User              @relation(fields: [authorId], references: [id])
+  parent      Message?          @relation("MessageThread", fields: [parentId], references: [id])
+  replies     Message[]         @relation("MessageThread")
   attachments MessageAttachment[]
   mentions    MessageMention[]
 
@@ -244,21 +282,23 @@ model BoardList {
 }
 
 model Task {
-  id          String       @id @default(cuid())
-  listId      String
-  title       String
-  description String?
-  priority    TaskPriority @default(MEDIUM)
-  position    Int
-  dueDate     DateTime?
-  labels      String[]
-  completedAt DateTime?
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
+  id               String       @id @default(cuid())
+  listId           String
+  title            String
+  description      String?
+  priority         TaskPriority @default(MEDIUM)
+  position         Int
+  dueDate          DateTime?
+  labels           String[]
+  estimatedMinutes Int?
+  completedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  list          BoardList      @relation(fields: [listId], references: [id], onDelete: Cascade)
+  list          BoardList       @relation(fields: [listId], references: [id], onDelete: Cascade)
   assignees     TaskAssignee[]
   comments      TaskComment[]
+  timeEntries   TaskTimeEntry[]
   notifications Notification[]
 
   @@map("tasks")
@@ -289,6 +329,21 @@ model TaskComment {
   author User @relation(fields: [authorId], references: [id])
 
   @@map("task_comments")
+}
+
+model TaskTimeEntry {
+  id        String   @id @default(cuid())
+  taskId    String
+  userId    String
+  minutes   Int
+  note      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("task_time_entries")
 }
 
 // ─── Files ────────────────────────────────────────────────────────────────────
@@ -350,4 +405,23 @@ model InviteToken {
   createdBy User       @relation(fields: [createdById], references: [id])
 
   @@map("invite_tokens")
+}
+
+// ─── Portal Sessions ──────────────────────────────────────────────────────────
+
+model PortalSession {
+  id           String   @id @default(cuid())
+  email        String
+  projectId    String
+  userId       String
+  token        String   @unique @default(cuid())
+  expiresAt    DateTime
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([email, projectId])
+  @@map("portal_sessions")
 }

@@ -6,4 +6,10 @@ export const presignUploadSchema = z.object({
   sizeBytes: z.number().int().positive().max(25 * 1024 * 1024),
 });
 
+export const confirmUploadSchema = presignUploadSchema.extend({
+  publicId: z.string().min(1),
+  secureUrl: z.string().url(),
+});
+
 export type PresignUploadInput = z.infer<typeof presignUploadSchema>;
+export type ConfirmUploadInput = z.infer<typeof confirmUploadSchema>;

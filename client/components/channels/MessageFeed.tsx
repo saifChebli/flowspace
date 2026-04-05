@@ -55,20 +55,20 @@ export default function MessageFeed({ channelId }: { channelId: string }) {
   const allMessages = data?.pages.flatMap((p) => p.messages) ?? [];
 
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto bg-[#f8f7f4]">
+    <div className="flex flex-1 flex-col overflow-y-auto">
       {hasNextPage && (
         <button
           onClick={() => fetchNextPage()}
           disabled={isFetchingNextPage}
-          className="mx-auto mt-5 rounded-full border border-border bg-white px-4 py-2 text-xs font-semibold text-muted-foreground hover:bg-[#f8fafc]"
+          className="mx-auto mt-4 rounded-lg border border-border/60 bg-white px-3.5 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
         >
-          {isFetchingNextPage ? 'Loading…' : 'Load older messages'}
+          {isFetchingNextPage ? 'Loading...' : 'Load older messages'}
         </button>
       )}
 
-      <div className="flex flex-1 flex-col gap-0 px-3 py-4 md:px-4">
+      <div className="flex flex-1 flex-col gap-0 px-3 py-3 md:px-4">
         {allMessages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} channelId={channelId} />
         ))}
       </div>
       <div ref={bottomRef} />

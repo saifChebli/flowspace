@@ -48,6 +48,9 @@ io.on('connection', (socket) => {
 
   console.log(`[Socket] Connected: ${user.name} (${socket.id})`);
 
+  // Auto-join a personal room for notifications
+  socket.join(`user:${user.id}`);
+
   // Join a channel room for real-time messages
   socket.on('channel:join', (channelId: string) => {
     socket.join(`channel:${channelId}`);

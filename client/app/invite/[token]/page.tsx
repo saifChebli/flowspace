@@ -43,7 +43,7 @@ export default function AcceptInvitePage() {
   if (!isAuthenticated) {
     return (
       <div className="hero-grid flex min-h-screen items-center justify-center p-4">
-        <div className="glass-card w-full max-w-md rounded-[2rem] p-8 text-center">
+        <div className="glass-card w-full max-w-md rounded-2xl p-8 text-center">
           <div className="eyebrow mx-auto mb-4 w-fit">Workspace invite</div>
           <h2 className="mb-3 text-2xl font-bold">You&apos;ve been invited</h2>
           <p className="mb-6 text-sm text-muted-foreground">
@@ -79,7 +79,7 @@ export default function AcceptInvitePage() {
   if (status === 'success') {
     return (
       <div className="hero-grid flex min-h-screen items-center justify-center p-4">
-        <div className="glass-card w-full max-w-md rounded-[2rem] p-8 text-center">
+        <div className="glass-card w-full max-w-md rounded-2xl p-8 text-center">
           <div className="mb-4 text-4xl">🎉</div>
           <h2 className="mb-3 text-2xl font-bold">Welcome aboard!</h2>
           <p className="mb-6 text-sm text-muted-foreground">
@@ -98,7 +98,7 @@ export default function AcceptInvitePage() {
 
   return (
     <div className="hero-grid flex min-h-screen items-center justify-center p-4">
-      <div className="glass-card w-full max-w-md rounded-[2rem] p-8 text-center">
+      <div className="glass-card w-full max-w-md rounded-2xl p-8 text-center">
         <div className="mb-4 text-4xl">⚠️</div>
         <h2 className="mb-3 text-2xl font-bold">Invite error</h2>
         <p className="mb-6 text-sm text-muted-foreground">{errorMsg}</p>

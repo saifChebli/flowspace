@@ -39,6 +39,7 @@ export default function ProjectFilesPage() {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadError, setUploadError] = useState('');
 
   const { data: files, isLoading } = useQuery<FileRecord[]>({
@@ -58,26 +59,57 @@ export default function ProjectFilesPage() {
 
     setUploading(true);
     setUploadError('');
+    setUploadProgress(0);
     try {
-      // Step 1: get presigned URL
-      const { data: presign } = await api.post<{ uploadUrl: string; key: string }>(
-        `/projects/${projectId}/files/presign`,
-        { name: file.name, mimeType: file.type, sizeBytes: file.size }
-      );
-
-      // Step 2: upload directly to S3
-      await fetch(presign.uploadUrl, {
-        method: 'PUT',
-        body: file,
-        headers: { 'Content-Type': file.type },
+      // Step 1: get Cloudinary signed params from our server
+      const { data: signData } = await api.post<{
+        signature: string;
+        timestamp: number;
+        folder: string;
+        apiKey: string;
+        cloudName: string;
+      }>(`/projects/${projectId}/files/presign`, {
+        name: file.name,
+        mimeType: file.type,
+        sizeBytes: file.size,
       });
 
-      // Step 3: confirm
+      // Step 2: upload directly to Cloudinary with progress tracking
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('api_key', signData.apiKey);
+      formData.append('timestamp', String(signData.timestamp));
+      formData.append('signature', signData.signature);
+      formData.append('folder', signData.folder);
+
+      const cloudinaryUrl = `https://api.cloudinary.com/v1_1/${signData.cloudName}/auto/upload`;
+
+      const uploadResult = await new Promise<{ public_id: string; secure_url: string }>(
+        (resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', cloudinaryUrl);
+          xhr.upload.onprogress = (ev) => {
+            if (ev.lengthComputable) setUploadProgress(Math.round((ev.loaded / ev.total) * 100));
+          };
+          xhr.onload = () => {
+            if (xhr.status >= 200 && xhr.status < 300) {
+              resolve(JSON.parse(xhr.responseText));
+            } else {
+              reject(new Error('Cloudinary upload failed'));
+            }
+          };
+          xhr.onerror = () => reject(new Error('Upload network error'));
+          xhr.send(formData);
+        }
+      );
+
+      // Step 3: confirm on our server
       await api.post(`/projects/${projectId}/files/confirm`, {
         name: file.name,
         mimeType: file.type,
         sizeBytes: file.size,
-        key: presign.key,
+        publicId: uploadResult.public_id,
+        secureUrl: uploadResult.secure_url,
       });
 
       queryClient.invalidateQueries({ queryKey: ['files', projectId] });
@@ -88,13 +120,14 @@ export default function ProjectFilesPage() {
       setUploadError(msg);
     } finally {
       setUploading(false);
+      setUploadProgress(0);
       if (fileInputRef.current) fileInputRef.current.value = '';
     }
   }
 
   return (
     <div className="space-y-5">
-      <div className="glass-card rounded-[1.8rem] px-5 py-5">
+      <div className="glass-card rounded-xl px-5 py-5">
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Files</p>
@@ -116,8 +149,16 @@ export default function ProjectFilesPage() {
               disabled={uploading}
               className="primary-button px-5 py-2.5 text-sm disabled:opacity-60"
             >
-              {uploading ? 'Uploading…' : '+ Upload file'}
+              {uploading ? `Uploading… ${uploadProgress}%` : '+ Upload file'}
             </button>
+            {uploading && (
+              <div className="mt-2 h-1.5 w-40 overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full bg-accent transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
           </div>
         </div>
         {uploadError && (
@@ -130,11 +171,11 @@ export default function ProjectFilesPage() {
       {isLoading ? (
         <div className="grid gap-3">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-16 animate-pulse rounded-[1.2rem] bg-muted" />
+            <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       ) : files?.length === 0 ? (
-        <div className="panel-card flex flex-col items-center justify-center rounded-[1.8rem] py-16 text-center">
+        <div className="panel-card flex flex-col items-center justify-center rounded-xl py-16 text-center">
           <div className="mb-3 text-4xl">📁</div>
           <p className="text-sm text-muted-foreground">No files uploaded yet.</p>
           <button
@@ -149,7 +190,7 @@ export default function ProjectFilesPage() {
           {files?.map((f) => (
             <div
               key={f.id}
-              className="flex items-center justify-between rounded-[1.4rem] border border-border/80 bg-white/75 px-5 py-4 transition hover:bg-white"
+              className="flex items-center justify-between rounded-xl border border-border/80 bg-white/75 px-5 py-4 transition hover:bg-white"
             >
               <div className="flex items-center gap-4">
                 <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-xl">
@@ -166,9 +207,9 @@ export default function ProjectFilesPage() {
               <button
                 onClick={() => download.mutate(f.id)}
                 disabled={download.isPending}
-                className="secondary-button px-3 py-2 text-xs"
+                className="secondary-button px-3.5 py-2 text-xs"
               >
-                Download
+                {download.isPending ? '…' : 'Download'}
               </button>
             </div>
           ))}

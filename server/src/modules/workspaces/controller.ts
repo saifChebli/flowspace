@@ -4,6 +4,7 @@ import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
   inviteMemberSchema,
+  updateMemberRoleSchema,
 } from './schema';
 
 export async function create(req: Request, res: Response, next: NextFunction) {
@@ -65,6 +66,26 @@ export async function removeMember(req: Request, res: Response, next: NextFuncti
       req.user!.id,
       req.params.memberId
     );
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function updateMemberRole(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = updateMemberRoleSchema.parse(req.body);
+    const result = await workspaceService.updateMemberRole(
+      req.params.slug,
+      req.user!.id,
+      req.params.memberId,
+      input
+    );
+    res.json(result);
+  } catch (err) { next(err); }
+}
+
+export async function listInvites(req: Request, res: Response, next: NextFunction) {
+  try {
+    const result = await workspaceService.getPendingInvites(req.params.slug, req.user!.id);
     res.json(result);
   } catch (err) { next(err); }
 }

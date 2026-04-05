@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
-import { createBoardSchema, createListSchema, updateListSchema } from './schema';
+import { createBoardSchema, updateBoardSchema, createListSchema, updateListSchema } from './schema';
 
 export async function createBoard(req: Request, res: Response, next: NextFunction) {
   try {
@@ -12,6 +12,19 @@ export async function createBoard(req: Request, res: Response, next: NextFunctio
 export async function listBoards(req: Request, res: Response, next: NextFunction) {
   try {
     res.json(await svc.getBoards(req.params.projectId, req.user!.id));
+  } catch (err) { next(err); }
+}
+
+export async function updateBoard(req: Request, res: Response, next: NextFunction) {
+  try {
+    const input = updateBoardSchema.parse(req.body);
+    res.json(await svc.updateBoard(req.params.boardId, req.user!.id, input));
+  } catch (err) { next(err); }
+}
+
+export async function deleteBoard(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await svc.deleteBoard(req.params.boardId, req.user!.id));
   } catch (err) { next(err); }
 }
 

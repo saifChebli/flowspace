@@ -6,11 +6,15 @@ export const createWorkspaceSchema = z.object({
     .string()
     .min(2)
     .max(50)
-    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+    .regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens')
+    .optional(),
   description: z.string().max(300).optional(),
 });
 
-export const updateWorkspaceSchema = createWorkspaceSchema.partial().omit({ slug: true });
+export const updateWorkspaceSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+  description: z.string().max(300).optional(),
+});
 
 export const inviteMemberSchema = z.object({
   email: z.string().email(),
@@ -24,3 +28,4 @@ export const updateMemberRoleSchema = z.object({
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceSchema>;
 export type UpdateWorkspaceInput = z.infer<typeof updateWorkspaceSchema>;
 export type InviteMemberInput = z.infer<typeof inviteMemberSchema>;
+export type UpdateMemberRoleInput = z.infer<typeof updateMemberRoleSchema>;

@@ -1,0 +1,375 @@
+/* ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   Landing Page — Dark Theme, Animations, Component Styles
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */
+
+/* ── Dark Theme Variables ──────────────────────────────────── */
+
+.landing {
+  --lp-bg: #0a0a0f;
+  --lp-bg-surface: #111118;
+  --lp-bg-elevated: #1a1a24;
+  --lp-border: rgba(255, 255, 255, 0.08);
+  --lp-border-hover: rgba(255, 255, 255, 0.15);
+  --lp-text: #f0f0f5;
+  --lp-text-secondary: #9090a0;
+  --lp-text-muted: #606070;
+  --lp-accent: #0f766e;
+  --lp-accent-2: #b7791f;
+  --lp-accent-glow: rgba(15, 118, 110, 0.3);
+  --lp-accent-2-glow: rgba(183, 121, 31, 0.3);
+  --font-instrument-serif: "Instrument Serif", serif;
+
+  background: var(--lp-bg);
+  color: var(--lp-text);
+  font-family: var(--font-dm-sans, "DM Sans", sans-serif);
+  font-size: 17px;
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+.landing *::selection {
+  background: rgba(15, 118, 110, 0.3);
+}
+
+/* ── Keyframe Animations ───────────────────────────────────── */
+
+@keyframes lp-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.85);
+  }
+}
+
+@keyframes lp-shimmer {
+  0% {
+    left: -100%;
+  }
+  100% {
+    left: 200%;
+  }
+}
+
+/* ── Scroll Reveal ─────────────────────────────────────────── */
+
+.lp-reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.lp-reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Stagger children: each .lp-reveal-child inside a visible section */
+.lp-reveal.visible .lp-stagger:nth-child(1) { transition-delay: 0ms; }
+.lp-reveal.visible .lp-stagger:nth-child(2) { transition-delay: 100ms; }
+.lp-reveal.visible .lp-stagger:nth-child(3) { transition-delay: 200ms; }
+.lp-reveal.visible .lp-stagger:nth-child(4) { transition-delay: 300ms; }
+.lp-reveal.visible .lp-stagger:nth-child(5) { transition-delay: 400ms; }
+.lp-reveal.visible .lp-stagger:nth-child(6) { transition-delay: 500ms; }
+
+/* ── Hero Entrance Sequence ────────────────────────────────── */
+
+.lp-hero-item {
+  opacity: 0;
+  transform: translateY(20px);
+}
+
+.lp-hero-item.animated {
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 0.6s ease-out, transform 0.6s ease-out;
+}
+
+.lp-hero-mockup {
+  opacity: 0;
+  transform: scale(0.96);
+}
+
+.lp-hero-mockup.animated {
+  opacity: 1;
+  transform: scale(1);
+  transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+/* ── Sticky Nav ────────────────────────────────────────────── */
+
+.lp-nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.lp-nav-link {
+  position: relative;
+  font-size: 14px;
+  color: var(--lp-text-secondary);
+  transition: color 0.2s ease;
+  padding: 4px 0;
+}
+
+.lp-nav-link:hover,
+.lp-nav-link.active {
+  color: var(--lp-text);
+}
+
+.lp-nav-link.active::after {
+  content: "";
+  position: absolute;
+  bottom: -4px;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--lp-accent);
+  border-radius: 1px;
+}
+
+/* ── CTA Buttons ───────────────────────────────────────────── */
+
+.lp-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  text-decoration: none;
+}
+
+.lp-cta-primary {
+  background: var(--lp-accent);
+  color: white;
+  border: none;
+}
+
+.lp-cta-primary:hover {
+  transform: scale(1.02);
+  box-shadow: 0 0 20px var(--lp-accent-glow);
+}
+
+.lp-cta-primary:active {
+  transform: scale(0.98);
+}
+
+.lp-cta-primary::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.1),
+    transparent
+  );
+  animation: lp-shimmer 3s ease-in-out infinite;
+}
+
+.lp-cta-outline {
+  background: transparent;
+  color: var(--lp-text);
+  border: 1px solid var(--lp-border-hover);
+}
+
+.lp-cta-outline:hover {
+  border-color: var(--lp-accent);
+  background: rgba(15, 118, 110, 0.05);
+  transform: scale(1.02);
+}
+
+.lp-cta-outline:active {
+  transform: scale(0.98);
+}
+
+/* ── Browser Mockup Chrome ─────────────────────────────────── */
+
+.lp-chrome {
+  background: var(--lp-bg-elevated);
+  border: 1px solid var(--lp-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.lp-chrome-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: var(--lp-bg-surface);
+  border-bottom: 1px solid var(--lp-border);
+}
+
+.lp-chrome-url {
+  flex: 1;
+  text-align: center;
+  background: var(--lp-bg-elevated);
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 11px;
+  color: var(--lp-text-muted);
+  font-family: var(--font-jetbrains-mono, "JetBrains Mono", monospace);
+}
+
+/* ── Mockup Reflection ─────────────────────────────────────── */
+
+.lp-reflect {
+  position: relative;
+}
+
+.lp-reflect::after {
+  content: "";
+  position: absolute;
+  bottom: -40px;
+  left: 5%;
+  right: 5%;
+  height: 40px;
+  background: linear-gradient(
+    to bottom,
+    rgba(15, 118, 110, 0.06),
+    transparent
+  );
+  filter: blur(8px);
+  pointer-events: none;
+}
+
+/* ── FAQ Accordion ─────────────────────────────────────────── */
+
+.lp-faq-answer {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.4s ease-out;
+}
+
+.lp-faq-answer.open {
+  max-height: 400px;
+}
+
+.lp-faq-icon {
+  transition: transform 0.3s ease;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--lp-text-muted);
+}
+
+.lp-faq-icon.open {
+  transform: rotate(45deg);
+  color: var(--lp-accent);
+}
+
+/* ── Mobile Menu Overlay ───────────────────────────────────── */
+
+.lp-mobile-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  background: rgba(10, 10, 15, 0.98);
+  backdrop-filter: blur(20px);
+  transform: translateY(-100%);
+  transition: transform 0.3s ease-out;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2rem;
+}
+
+.lp-mobile-overlay.open {
+  transform: translateY(0);
+}
+
+/* ── Grid Pattern (Final CTA) ──────────────────────────────── */
+
+.lp-grid-bg {
+  position: relative;
+  background: linear-gradient(135deg, #0d0d18 0%, #111828 50%, #0d0d18 100%);
+}
+
+.lp-grid-bg::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: repeating-linear-gradient(
+      0deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 40px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.02) 0px,
+      rgba(255, 255, 255, 0.02) 1px,
+      transparent 1px,
+      transparent 40px
+    );
+  pointer-events: none;
+}
+
+/* ── Pricing Featured Card ─────────────────────────────────── */
+
+.lp-pricing-featured {
+  border: 1px solid rgba(15, 118, 110, 0.4) !important;
+  background: linear-gradient(
+    135deg,
+    var(--lp-bg-elevated) 0%,
+    rgba(15, 118, 110, 0.05) 100%
+  ) !important;
+}
+
+/* ── Task Card in Mockup ───────────────────────────────────── */
+
+.lp-task-card {
+  background: var(--lp-bg-elevated);
+  border: 1px solid var(--lp-border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+/* ── Feature pill label ────────────────────────────────────── */
+
+.lp-feature-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 4px 14px;
+  border-radius: 100px;
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--lp-accent);
+  border: 1px solid rgba(15, 118, 110, 0.25);
+}
+
+/* ── Section padding ───────────────────────────────────────── */
+
+.lp-section {
+  padding: 120px 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+@media (max-width: 768px) {
+  .lp-section {
+    padding: 80px 20px;
+  }
+}

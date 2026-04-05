@@ -16,6 +16,8 @@ import boardsRouter from './modules/boards/router';
 import tasksRouter from './modules/tasks/router';
 import filesRouter from './modules/files/router';
 import notificationsRouter from './modules/notifications/router';
+import dashboardRouter from './modules/dashboard/router';
+import portalRouter from './modules/portal/router';
 
 export function createApp() {
   const app = express();
@@ -43,7 +45,9 @@ export function createApp() {
   app.use('/api/lists/:listId/tasks', tasksRouter);
   app.use('/api/tasks', tasksRouter);
   app.use('/api/projects/:projectId/files', filesRouter);
+  app.use('/api/projects/:projectId/dashboard', dashboardRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/portal', portalRouter);
 
   // ─── 404 handler ──────────────────────────────────────────────────────────
   app.use((_req, res) => {

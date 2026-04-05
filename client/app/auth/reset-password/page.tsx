@@ -37,7 +37,7 @@ function ResetPasswordContent() {
   }
 
   return (
-    <div className="glass-card w-full max-w-xl rounded-4xl p-8 md:p-10">
+    <div className="glass-card w-full max-w-xl rounded-2xl p-8 md:p-10">
       <div className="eyebrow">Secure reset</div>
       <h2 className="mb-3 mt-5 text-3xl font-bold">Set a new password</h2>
       <p className="mb-6 text-sm leading-6 text-muted-foreground">

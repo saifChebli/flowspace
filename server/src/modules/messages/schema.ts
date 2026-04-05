@@ -4,6 +4,7 @@ export const sendMessageSchema = z.object({
   body: z.string().min(1).max(4000),
   mentionedUserIds: z.array(z.string()).optional(),
   fileIds: z.array(z.string()).optional(),
+  parentId: z.string().optional(),
 });
 
 export const editMessageSchema = z.object({

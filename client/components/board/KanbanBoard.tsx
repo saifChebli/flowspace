@@ -1,9 +1,31 @@
 'use client';
 
-import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams } from 'next/navigation';
+import {
+  DndContext,
+  DragOverlay,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDroppable,
+  type DragStartEvent,
+  type DragEndEvent,
+  type DragOverEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  horizontalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import api from '@/lib/api';
-import type { Board, BoardList, Task } from '@/types';
+import { useSocket } from '@/hooks/useSocket';
+import { Plus } from 'lucide-react';
+import type { Board, BoardList, Task, Project } from '@/types';
 import TaskDetailModal from './TaskDetailModal';
 
 const dueDateFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -14,11 +36,18 @@ const dueDateFormatter = new Intl.DateTimeFormat('en-GB', {
 });
 
 const PRIORITY_COLORS: Record<string, string> = {
-  LOW: 'bg-slate-100 text-slate-600',
-  MEDIUM: 'bg-blue-100 text-blue-700',
-  HIGH: 'bg-amber-100 text-amber-700',
-  URGENT: 'bg-red-100 text-red-700',
+  LOW: 'pill-muted',
+  MEDIUM: 'pill-accent',
+  HIGH: 'pill-gold',
+  URGENT: 'bg-destructive/12 text-destructive',
 };
+
+const LIST_ACCENTS = [
+  'from-[#f7ecda] to-[#fff8ee]',
+  'from-[#e3f1eb] to-[#f9fcfa]',
+  'from-[#eee6da] to-[#fff9f1]',
+  'from-[#f2e6de] to-[#fff7f3]',
+];
 
 interface KanbanBoardProps {
   board: Board;
@@ -27,10 +56,180 @@ interface KanbanBoardProps {
 
 export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
   const queryClient = useQueryClient();
+  const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const [addingList, setAddingList] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [activeTask, setActiveTask] = useState<Task | null>(null);
 
+  const { data: project } = useQuery<Project>({
+    queryKey: ['project', workspaceSlug, projectId, 'members'],
+    queryFn: () => api.get(`/workspaces/${workspaceSlug}/projects/${projectId}`).then((r) => r.data),
+  });
+
+  const members = project?.members ?? [];
+
+  // ─── Real-time socket sync ────────────────────────────────────────────
+  const { joinProject, leaveProject, on } = useSocket();
+
+  useEffect(() => {
+    joinProject(projectId);
+    const offUpdated = on('task:updated', () => {
+      queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
+    });
+    const offMoved = on('task:moved', () => {
+      queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
+    });
+    return () => {
+      leaveProject(projectId);
+      offUpdated?.();
+      offMoved?.();
+    };
+  }, [projectId, joinProject, leaveProject, on, queryClient]);
+
+  // ─── DnD sensors ──────────────────────────────────────────────────────
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+
+  // Build a flat map of taskId → task for quick lookup
+  const taskMap = useMemo(() => {
+    const map = new Map<string, Task>();
+    for (const list of board.lists) {
+      for (const task of list.tasks) map.set(task.id, task);
+    }
+    return map;
+  }, [board.lists]);
+
+  // List IDs for sortable context
+  const listIds = useMemo(() => board.lists.map((l) => l.id), [board.lists]);
+
+  // ─── DnD mutations ───────────────────────────────────────────────────
+  const moveTask = useMutation({
+    mutationFn: ({ taskId, listId, position }: { taskId: string; listId: string; position: number }) =>
+      api.post(`/tasks/${taskId}/move`, { listId, position }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
+    },
+  });
+
+  const handleDragStart = useCallback(
+    (event: DragStartEvent) => {
+      const task = taskMap.get(event.active.id as string);
+      if (task) setActiveTask(task);
+    },
+    [taskMap]
+  );
+
+  const handleDragOver = useCallback(
+    (event: DragOverEvent) => {
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeId = active.id as string;
+      const overId = over.id as string;
+
+      // Find which list the active task is in and which list the over target is in
+      const activeList = board.lists.find((l) => l.tasks.some((t) => t.id === activeId));
+      const overList =
+        board.lists.find((l) => l.id === overId) ??
+        board.lists.find((l) => l.tasks.some((t) => t.id === overId));
+
+      if (!activeList || !overList || activeList.id === overList.id) return;
+
+      // Optimistically move task between lists in cache
+      queryClient.setQueryData(['boards', projectId], (old: Board[] | undefined) => {
+        if (!old) return old;
+        return old.map((b) => {
+          if (b.id !== board.id) return b;
+          return {
+            ...b,
+            lists: b.lists.map((l) => {
+              if (l.id === activeList.id) {
+                return { ...l, tasks: l.tasks.filter((t) => t.id !== activeId) };
+              }
+              if (l.id === overList.id) {
+                const task = activeList.tasks.find((t) => t.id === activeId);
+                if (!task) return l;
+                const overIndex = l.tasks.findIndex((t) => t.id === overId);
+                const newTasks = [...l.tasks];
+                newTasks.splice(overIndex >= 0 ? overIndex : newTasks.length, 0, {
+                  ...task,
+                  listId: l.id,
+                });
+                return { ...l, tasks: newTasks };
+              }
+              return l;
+            }),
+          };
+        });
+      });
+    },
+    [board, projectId, queryClient]
+  );
+
+  const handleDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      setActiveTask(null);
+      const { active, over } = event;
+      if (!over) return;
+
+      const activeId = active.id as string;
+      const overId = over.id as string;
+
+      // Find the list containing the active task (after any optimistic moves)
+      const currentData = queryClient.getQueryData<Board[]>(['boards', projectId]);
+      const currentBoard = currentData?.find((b) => b.id === board.id);
+      if (!currentBoard) return;
+
+      const targetList = currentBoard.lists.find((l) => l.tasks.some((t) => t.id === activeId));
+      if (!targetList) return;
+
+      const currentIndex = targetList.tasks.findIndex((t) => t.id === activeId);
+      let newIndex = targetList.tasks.findIndex((t) => t.id === overId);
+
+      // If dropped on a list container (not a task), put at end
+      if (newIndex < 0) {
+        const isListDrop = currentBoard.lists.some((l) => l.id === overId);
+        if (isListDrop) {
+          const dropList = currentBoard.lists.find((l) => l.id === overId);
+          if (dropList) {
+            newIndex = dropList.tasks.length;
+            // Move to that list at end
+            moveTask.mutate({ taskId: activeId, listId: overId, position: newIndex });
+            return;
+          }
+        }
+        return;
+      }
+
+      // Reorder within same list or finalize cross-list move
+      if (currentIndex !== newIndex || targetList.id !== taskMap.get(activeId)?.listId) {
+        // Optimistically reorder in cache
+        queryClient.setQueryData(['boards', projectId], (old: Board[] | undefined) => {
+          if (!old) return old;
+          return old.map((b) => {
+            if (b.id !== board.id) return b;
+            return {
+              ...b,
+              lists: b.lists.map((l) => {
+                if (l.id !== targetList.id) return l;
+                const tasks = [...l.tasks];
+                const [moved] = tasks.splice(currentIndex, 1);
+                tasks.splice(newIndex, 0, moved);
+                return { ...l, tasks };
+              }),
+            };
+          });
+        });
+
+        moveTask.mutate({ taskId: activeId, listId: targetList.id, position: newIndex });
+      }
+    },
+    [board, projectId, queryClient, moveTask, taskMap]
+  );
+
+  // ─── List CRUD ────────────────────────────────────────────────────────
   const createList = useMutation({
     mutationFn: (name: string) =>
       api.post(`/projects/${projectId}/boards/${board.id}/lists`, {
@@ -51,63 +250,94 @@ export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
   }
 
   return (
-    <div className="min-h-[72vh] rounded-[1.8rem] bg-[#eceff3] p-5 md:p-6">
-      <div className="mb-5 flex items-center justify-between">
+    <div className="min-h-[72vh] rounded-xl bg-[linear-gradient(180deg,rgba(247,239,227,0.92),rgba(240,227,207,0.72))] p-4 md:p-5">
+      <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-            Project board
+          <p className="section-kicker">Project board</p>
+          <h3 className="mt-2 text-xl font-semibold text-foreground md:text-2xl">{board.name}</h3>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
+            Keep cards moving across a clean delivery flow with quick add actions and task detail on demand.
           </p>
-          <h3 className="mt-1 text-xl font-semibold text-[#111827]">{board.name}</h3>
         </div>
-        <div className="rounded-full border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground">
-          {board.lists.length} lists
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="pill-muted">{board.lists.length} lists</div>
+          <div className="pill-accent">{board.lists.reduce((total, list) => total + list.tasks.length, 0)} cards</div>
+          <div className="pill-gold">Live workflow</div>
         </div>
       </div>
 
-      <div className="flex h-full gap-4 overflow-x-auto pb-2">
-        {board.lists.map((list) => (
-          <KanbanList key={list.id} list={list} projectId={projectId} onTaskClick={setSelectedTaskId} />
-        ))}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
+          <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
+            {board.lists.map((list, index) => (
+              <KanbanList
+                key={list.id}
+                list={list}
+                projectId={projectId}
+                accentClass={LIST_ACCENTS[index % LIST_ACCENTS.length]}
+                onTaskClick={setSelectedTaskId}
+                members={members}
+              />
+            ))}
+          </SortableContext>
 
-        {/* Add list column */}
-        {addingList ? (
-          <form
-            onSubmit={handleAddList}
-            className="flex w-64 shrink-0 flex-col gap-2 rounded-3xl border border-dashed border-[#d0d7e2] bg-white/70 p-4"
-          >
-            <input
-              autoFocus
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-              placeholder="List name…"
-              className="rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-accent/40"
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={createList.isPending || !newListName.trim()}
-                className="flex-1 rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {createList.isPending ? 'Adding…' : 'Add list'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAddingList(false); setNewListName(''); }}
-                className="rounded-xl border border-border bg-white px-3 py-2 text-xs text-muted-foreground"
-              >
-                ✕
-              </button>
-            </div>
-          </form>
-        ) : (
-          <button
-            onClick={() => setAddingList(true)}
-            className="flex h-14 w-48 shrink-0 items-center justify-center rounded-3xl border-2 border-dashed border-[#d0d7e2] bg-white/40 text-sm font-semibold text-muted-foreground transition hover:border-accent/40 hover:bg-white/70 hover:text-accent"
-          >
-            + Add list
-          </button>
-        )}
-      </div>
+          {addingList ? (
+            <form
+              onSubmit={handleAddList}
+              className="soft-card flex w-[300px] shrink-0 flex-col gap-3 rounded-xl border-dashed p-4"
+            >
+              <div>
+                <p className="section-kicker">New list</p>
+                <p className="mt-1 text-sm text-muted-foreground">Add another stage to the board.</p>
+              </div>
+              <input
+                autoFocus
+                value={newListName}
+                onChange={(e) => setNewListName(e.target.value)}
+                placeholder="List name…"
+                className="field-input"
+              />
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={createList.isPending || !newListName.trim()}
+                  className="primary-button flex-1 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {createList.isPending ? 'Adding…' : 'Add list'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAddingList(false); setNewListName(''); }}
+                  className="secondary-button px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setAddingList(true)}
+              className="soft-card flex h-fit min-h-[116px] w-[300px] shrink-0 flex-col items-start justify-center rounded-xl border-2 border-dashed px-5 py-5 text-left transition hover:border-accent/40 hover:bg-card/90"
+            >
+              <span className="section-kicker">Expand flow</span>
+              <span className="mt-2 flex items-center gap-1.5 text-base font-semibold text-foreground"><Plus className="h-4 w-4" /> Add another list</span>
+              <span className="mt-1 text-sm leading-6 text-muted-foreground">
+                Create a new column for another stage, review lane, or backlog slice.
+              </span>
+            </button>
+          )}
+        </div>
+
+        <DragOverlay dropAnimation={null}>
+          {activeTask ? <TaskCardOverlay task={activeTask} /> : null}
+        </DragOverlay>
+      </DndContext>
 
       {selectedTaskId && (
         <TaskDetailModal
@@ -120,29 +350,42 @@ export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
   );
 }
 
+// ─── Kanban List ──────────────────────────────────────────────────────────────
+
 function KanbanList({
   list,
   projectId,
+  accentClass,
   onTaskClick,
+  members,
 }: {
   list: BoardList;
   projectId: string;
+  accentClass: string;
   onTaskClick: (taskId: string) => void;
+  members: { user: { id: string; name: string; avatarUrl: string | null }; role: string }[];
 }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
+  const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
+
+  const taskIds = useMemo(() => list.tasks.map((t) => t.id), [list.tasks]);
+
+  const { setNodeRef: setDroppableRef } = useDroppable({ id: list.id });
 
   const createTask = useMutation({
-    mutationFn: (taskTitle: string) =>
+    mutationFn: ({ taskTitle, assigneeIds }: { taskTitle: string; assigneeIds?: string[] }) =>
       api.post(`/lists/${list.id}/tasks`, {
         title: taskTitle,
         position: list.tasks.length,
         priority: 'MEDIUM',
+        ...(assigneeIds?.length ? { assigneeIds } : {}),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
       setTitle('');
+      setSelectedAssignees([]);
       setAdding(false);
     },
   });
@@ -150,78 +393,169 @@ function KanbanList({
   function handleAddTask(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    createTask.mutate(title.trim());
+    createTask.mutate({ taskTitle: title.trim(), assigneeIds: selectedAssignees.length ? selectedAssignees : undefined });
+  }
+
+  function toggleAssignee(userId: string) {
+    setSelectedAssignees((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
   }
 
   return (
-    <div className="flex w-80 shrink-0 flex-col rounded-3xl border border-[#d8dee7] bg-[#f7f8fa] shadow-[0_10px_22px_rgba(15,23,42,0.06)]">
-      <div className="flex items-center justify-between border-b border-[#e2e8f0] px-4 py-4">
-        <span className="text-sm font-semibold text-[#0f172a]">{list.name}</span>
-        <span className="rounded-full bg-white px-3 py-1 text-xs font-bold text-muted-foreground shadow-sm">
-          {list.tasks.length}
-        </span>
-      </div>
-
-      <div className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4">
-        {list.tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} />
-        ))}
-
-        {/* Inline add task form */}
-        {adding ? (
-          <form onSubmit={handleAddTask} className="mt-1 flex flex-col gap-2">
-            <textarea
-              autoFocus
-              rows={2}
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if (title.trim()) createTask.mutate(title.trim()); } }}
-              placeholder="Task title…"
-              className="resize-none rounded-xl border border-border bg-white px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-accent/40"
-            />
-            <div className="flex gap-2">
-              <button
-                type="submit"
-                disabled={createTask.isPending || !title.trim()}
-                className="flex-1 rounded-xl bg-accent px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-              >
-                {createTask.isPending ? 'Adding…' : 'Add task'}
-              </button>
-              <button
-                type="button"
-                onClick={() => { setAdding(false); setTitle(''); }}
-                className="rounded-xl border border-border bg-white px-3 py-2 text-xs text-muted-foreground"
-              >
-                ✕
-              </button>
+    <SortableContext items={taskIds} strategy={verticalListSortingStrategy} id={list.id}>
+      <section
+        className={`flex max-h-[calc(100vh-18rem)] w-[300px] shrink-0 flex-col rounded-xl border border-border/85 bg-gradient-to-b ${accentClass} shadow-[0_4px_24px_rgba(23,32,51,0.06)]`}
+        data-list-id={list.id}
+      >
+        <div className="sticky top-0 z-10 rounded-t-xl border-b border-border/70 bg-[rgba(255,250,241,0.86)] px-4 py-3.5 backdrop-blur-sm">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">{list.name}</p>
+              <p className="mt-1 text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+                {list.tasks.length === 0 ? 'Empty lane' : `${list.tasks.length} card${list.tasks.length === 1 ? '' : 's'}`}
+              </p>
             </div>
-          </form>
-        ) : (
-          <button
-            onClick={() => setAdding(true)}
-            className="rounded-2xl border border-dashed border-[#cbd5e1] bg-white/70 px-4 py-3 text-left text-sm font-medium text-muted-foreground transition hover:border-[#94a3b8] hover:bg-white"
-          >
-            + Add task
-          </button>
-        )}
-      </div>
+            <span className="pill-muted">{list.tasks.length}</span>
+          </div>
+        </div>
+
+        <div ref={setDroppableRef} className="flex flex-1 flex-col gap-3 overflow-y-auto px-3 py-3" style={{ minHeight: 60 }}>
+          {list.tasks.map((task) => (
+            <SortableTaskCard key={task.id} task={task} onClick={() => onTaskClick(task.id)} />
+          ))}
+
+          {list.tasks.length === 0 && (
+            <div className="flex min-h-[60px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 text-xs text-muted-foreground">
+              Drop cards here
+            </div>
+          )}
+
+          {adding ? (
+            <form onSubmit={handleAddTask} className="soft-row mt-1 flex flex-col gap-3 rounded-lg p-3">
+              <textarea
+                autoFocus
+                rows={2}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (title.trim()) createTask.mutate({ taskTitle: title.trim(), assigneeIds: selectedAssignees.length ? selectedAssignees : undefined });
+                  }
+                }}
+                placeholder="Task title…"
+                className="field-input resize-none"
+              />
+              {/* Assignee avatar row */}
+              {members.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Assign</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {members.map(({ user }) => {
+                      const isSelected = selectedAssignees.includes(user.id);
+                      return (
+                        <button
+                          key={user.id}
+                          type="button"
+                          onClick={() => toggleAssignee(user.id)}
+                          className={`icon-chip flex h-7 w-7 text-[10px] font-semibold transition ${
+                            isSelected ? 'ring-2 ring-accent/50' : 'opacity-50 hover:opacity-80'
+                          }`}
+                          title={user.name}
+                        >
+                          {user.name.charAt(0)}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="submit"
+                  disabled={createTask.isPending || !title.trim()}
+                  className="primary-button flex-1 px-4 py-2 text-sm disabled:opacity-50"
+                >
+                  {createTask.isPending ? 'Adding…' : 'Add task'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAdding(false); setTitle(''); setSelectedAssignees([]); }}
+                  className="secondary-button px-4 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          ) : (
+            <button
+              onClick={() => setAdding(true)}
+              className="soft-row flex items-center gap-1.5 rounded-lg border-dashed px-4 py-3 text-left text-sm font-semibold text-muted-foreground transition hover:border-accent/40 hover:bg-card/95 hover:text-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add a card
+            </button>
+          )}
+        </div>
+      </section>
+    </SortableContext>
+  );
+}
+
+// ─── Sortable Task Card ───────────────────────────────────────────────────────
+
+function SortableTaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: task.id,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.3 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
+      <TaskCardContent task={task} onClick={onClick} />
     </div>
   );
 }
 
-function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
-  const attachmentCount = (task as Task & { attachments?: unknown[] }).attachments?.length ?? 0;
-  const commentCount = (task as Task & { comments?: unknown[] }).comments?.length ?? 0;
+// ─── Drag Overlay (ghost card) ────────────────────────────────────────────────
+
+function TaskCardOverlay({ task }: { task: Task }) {
+  return (
+    <div className="w-[276px] rotate-2 opacity-90">
+      <TaskCardContent task={task} onClick={() => {}} />
+    </div>
+  );
+}
+
+// ─── Task Card Content (shared between real + overlay) ────────────────────────
+
+function TaskCardContent({ task, onClick }: { task: Task; onClick: () => void }) {
+  const assigneeCount = task.assignees?.length ?? 0;
 
   return (
     <div
       onClick={onClick}
-      className="cursor-pointer rounded-2xl border border-[#e2e8f0] bg-white p-4 shadow-[0_6px_18px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_12px_24px_rgba(15,23,42,0.08)]"
+      className="cursor-pointer rounded-xl border border-border/80 bg-[rgba(255,250,241,0.98)] p-3.5 shadow-sm transition hover:-translate-y-0.5 hover:border-accent/20 hover:shadow-md"
     >
-      <p className="text-sm font-semibold leading-snug text-[#111827]">{task.title}</p>
+      {task.labels && task.labels.length > 0 && (
+        <div className="mb-3 flex flex-wrap gap-1.5">
+          {task.labels.map((label) => (
+            <span key={label} className="pill-accent px-2.5 py-1 text-[10px]">
+              {label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      <p className="text-sm font-semibold leading-snug text-foreground">{task.title}</p>
 
       {task.description && (
-        <p className="mt-2 line-clamp-2 text-sm leading-6 text-[#64748b]">{task.description}</p>
+        <p className="mt-2 line-clamp-2 text-sm leading-6 text-muted-foreground">{task.description}</p>
       )}
 
       {task.dueDate && (
@@ -231,41 +565,35 @@ function TaskCard({ task, onClick }: { task: Task; onClick: () => void }) {
       )}
 
       <div className="mt-3 flex items-center gap-2">
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${PRIORITY_COLORS[task.priority]}`}>
+        <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${PRIORITY_COLORS[task.priority]}`}>
           {task.priority}
         </span>
+
+        {task.estimatedMinutes != null && (
+          <span className="pill-muted px-2 py-0.5 text-[10px]">
+            ⏱ {task.estimatedMinutes >= 60 ? `${Math.floor(task.estimatedMinutes / 60)}h${task.estimatedMinutes % 60 ? ` ${task.estimatedMinutes % 60}m` : ''}` : `${task.estimatedMinutes}m`}
+          </span>
+        )}
 
         {task.assignees && task.assignees.length > 0 && (
           <div className="ml-auto flex -space-x-1.5">
             {task.assignees.slice(0, 3).map(({ user }) => (
               <div
                 key={user.id}
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-indigo-200 text-[10px] font-semibold text-indigo-800 ring-1 ring-white"
+                className="icon-chip flex h-6 w-6 text-[10px] font-semibold ring-2 ring-[rgba(255,250,241,0.95)]"
                 title={user.name}
               >
                 {user.name.charAt(0)}
               </div>
             ))}
+            {assigneeCount > 3 && (
+              <div className="flex h-6 w-6 items-center justify-center rounded-full bg-card text-[10px] font-semibold text-muted-foreground ring-2 ring-[rgba(255,250,241,0.95)]">
+                +{assigneeCount - 3}
+              </div>
+            )}
           </div>
         )}
       </div>
-
-      {(attachmentCount > 0 || commentCount > 0) && (
-        <div className="mt-3 flex items-center gap-3 border-t border-[#eef2f7] pt-3 text-xs text-[#64748b]">
-          {attachmentCount > 0 && <span>📎 {attachmentCount}</span>}
-          {commentCount > 0 && <span>💬 {commentCount}</span>}
-        </div>
-      )}
-
-      {task.labels && task.labels.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {task.labels.map((label) => (
-            <span key={label} className="rounded-full bg-[#eef2ff] px-2 py-0.5 text-[10px] font-medium text-[#4f46e5]">
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

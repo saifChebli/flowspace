@@ -28,8 +28,12 @@ export default function BoardPage() {
 
   if (!board) {
     return (
-      <div className="panel-card flex h-full min-h-[420px] flex-col items-center justify-center gap-4 rounded-[2rem]">
-        <p className="text-muted-foreground">No board yet.</p>
+      <div className="panel-card flex h-full min-h-[460px] flex-col items-center justify-center gap-4 rounded-xl px-6 text-center">
+        <div className="eyebrow">Board setup</div>
+        <h2 className="text-2xl font-semibold tracking-tight text-foreground">Build your workflow surface</h2>
+        <p className="max-w-md text-sm leading-6 text-muted-foreground">
+          Start with a board and organize the delivery flow into lists like backlog, in progress, review, and done.
+        </p>
         <button
           onClick={() => createBoard.mutate()}
           disabled={createBoard.isPending}
@@ -42,7 +46,7 @@ export default function BoardPage() {
   }
 
   return (
-    <div className="panel-card h-full overflow-x-auto rounded-[2rem]">
+    <div className="panel-card h-full overflow-hidden rounded-xl p-2 md:p-3">
       <KanbanBoard board={board} projectId={projectId} />
     </div>
   );

@@ -20,6 +20,7 @@
     "@aws-sdk/s3-request-presigner": "^3.577.0",
     "@prisma/client": "^5.13.0",
     "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.9.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
@@ -63,11 +64,22 @@
   "jest": {
     "preset": "ts-jest",
     "testEnvironment": "node",
-    "roots": ["<rootDir>/src"],
-    "testMatch": ["**/__tests__/**/*.test.ts"],
+    "roots": [
+      "<rootDir>/src"
+    ],
+    "testMatch": [
+      "**/__tests__/**/*.test.ts"
+    ],
     "clearMocks": true,
     "transform": {
-      "^.+\\.tsx?$": ["ts-jest", { "tsconfig": { "module": "CommonJS" } }]
+      "^.+\\.tsx?$": [
+        "ts-jest",
+        {
+          "tsconfig": {
+            "module": "CommonJS"
+          }
+        }
+      ]
     }
   }
 }

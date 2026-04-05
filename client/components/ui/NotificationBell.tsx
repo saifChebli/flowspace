@@ -1,35 +1,93 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Bell, CheckCheck, Inbox } from 'lucide-react';
+import { useSocket } from '@/hooks/useSocket';
 import api from '@/lib/api';
 
-interface Notification {
+interface RawNotification {
   id: string;
   type: string;
-  title: string;
-  body: string;
   read: boolean;
   createdAt: string;
-  link: string | null;
+  actor?: { id: string; name: string; avatarUrl: string | null } | null;
+  task?: { id: string; title: string } | null;
+  meta?: Record<string, unknown> | null;
 }
 
 interface NotificationsResponse {
-  notifications: Notification[];
+  notifications: RawNotification[];
   unreadCount: number;
   nextCursor: string | null;
+}
+
+function formatNotification(n: RawNotification): { title: string; body: string } {
+  const actor = n.actor?.name ?? 'Someone';
+  switch (n.type) {
+    case 'TASK_ASSIGNED':
+      return {
+        title: 'Task assigned',
+        body: n.task ? `${actor} assigned you to "${n.task.title}"` : `${actor} assigned you to a task`,
+      };
+    case 'TASK_MENTIONED':
+      return {
+        title: 'Mentioned in task',
+        body: n.task ? `${actor} mentioned you in "${n.task.title}"` : `${actor} mentioned you in a task`,
+      };
+    case 'MESSAGE_MENTIONED':
+      return {
+        title: 'Mentioned in chat',
+        body: `${actor} mentioned you in a message`,
+      };
+    case 'FILE_UPLOADED':
+      return {
+        title: 'New file',
+        body: `${actor} uploaded "${(n.meta as Record<string, string>)?.fileName ?? 'a file'}"`,
+      };
+    case 'INVITE_ACCEPTED':
+      return {
+        title: 'Invite accepted',
+        body: `${actor} joined the workspace`,
+      };
+    default:
+      return { title: 'Notification', body: `You have a new notification` };
+  }
+}
+
+function relativeTime(dateStr: string) {
+  const diffMin = Math.floor((Date.now() - new Date(dateStr).getTime()) / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'yesterday';
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }
 
 export default function NotificationBell() {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const { on } = useSocket();
 
   const { data } = useQuery<NotificationsResponse>({
     queryKey: ['notifications'],
     queryFn: () => api.get('/notifications').then((r) => r.data),
     refetchInterval: 30_000,
   });
+
+  // Real-time notification push — invalidate notifications query
+  useEffect(() => {
+    const off = on('notification:new', () => {
+      queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    });
+    return off;
+  }, [on, queryClient]);
 
   const markOne = useMutation({
     mutationFn: (id: string) => api.patch(`/notifications/${id}/read`),
@@ -57,39 +115,30 @@ export default function NotificationBell() {
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="relative flex h-9 w-9 items-center justify-center rounded-2xl border border-border/60 bg-white/80 text-foreground transition hover:bg-white"
+        className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-border/60 bg-white/80 text-muted-foreground transition-all hover:bg-white hover:text-foreground hover:shadow-sm"
         aria-label="Notifications"
       >
-        <svg
-          xmlns="http://www.w3.org/2000/svg"
-          className="h-[18px] w-[18px]"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 00-4.929-5.9A2 2 0 0011 3a2 2 0 00-2.071 2.1A6 6 0 006 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-          />
-        </svg>
+        <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white">
+          <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[9px] font-bold text-white">
             {unread > 9 ? '9+' : unread}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute right-0 top-11 z-50 w-80 overflow-hidden rounded-2xl border border-border/80 bg-white shadow-xl">
+        <div className="glass-card absolute left-1/2 top-10 z-50 w-80 -translate-x-1/2 overflow-hidden rounded-xl shadow-lg animate-in fade-in-0 slide-in-from-top-2">
           <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-            <span className="text-sm font-semibold">Notifications</span>
+            <div className="flex items-center gap-2">
+              <Inbox className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-semibold">Notifications</span>
+            </div>
             {unread > 0 && (
               <button
                 onClick={() => markAll.mutate()}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-1 text-xs text-muted-foreground transition hover:text-accent"
               >
+                <CheckCheck className="h-3.5 w-3.5" />
                 Mark all read
               </button>
             )}
@@ -97,32 +146,35 @@ export default function NotificationBell() {
 
           <div className="max-h-72 overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="px-5 py-8 text-center text-sm text-muted-foreground">
-                No notifications yet.
+              <div className="flex flex-col items-center gap-2 px-5 py-8 text-center">
+                <Bell className="h-8 w-8 text-muted-foreground/40" />
+                <p className="text-sm text-muted-foreground">No notifications yet</p>
               </div>
             ) : (
-              notifications.map((n) => (
-                <button
-                  key={n.id}
-                  onClick={() => {
-                    if (!n.read) markOne.mutate(n.id);
-                    if (n.link) window.location.href = n.link;
-                    setOpen(false);
-                  }}
-                  className={`flex w-full flex-col gap-0.5 px-4 py-3 text-left transition hover:bg-muted/50 ${
-                    n.read ? 'opacity-60' : ''
-                  }`}
-                >
-                  <span className="text-xs font-semibold">{n.title}</span>
-                  <span className="text-xs text-muted-foreground">{n.body}</span>
-                  <span className="mt-1 text-[10px] text-muted-foreground/60">
-                    {new Date(n.createdAt).toLocaleString()}
-                  </span>
-                  {!n.read && (
-                    <span className="absolute right-4 mt-1 h-2 w-2 rounded-full bg-blue-500" />
-                  )}
-                </button>
-              ))
+              notifications.map((n) => {
+                const { title, body } = formatNotification(n);
+                return (
+                  <button
+                    key={n.id}
+                    onClick={() => {
+                      if (!n.read) markOne.mutate(n.id);
+                      setOpen(false);
+                    }}
+                    className={`relative flex w-full flex-col gap-0.5 border-b border-border/30 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-accent-soft/40 ${
+                      n.read ? 'opacity-55' : ''
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{title}</span>
+                    <span className="text-xs text-muted-foreground">{body}</span>
+                    <span className="mt-1 text-[10px] text-muted-foreground/60" suppressHydrationWarning>
+                      {relativeTime(n.createdAt)}
+                    </span>
+                    {!n.read && (
+                      <span className="absolute right-3.5 top-3.5 h-2 w-2 rounded-full bg-accent" />
+                    )}
+                  </button>
+                );
+              })
             )}
           </div>
         </div>

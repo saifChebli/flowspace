@@ -4,6 +4,10 @@ export const createBoardSchema = z.object({
   name: z.string().min(2).max(100),
 });
 
+export const updateBoardSchema = z.object({
+  name: z.string().min(2).max(100).optional(),
+});
+
 export const createListSchema = z.object({
   name: z.string().min(1).max(100),
   position: z.number().int().min(0),
@@ -19,6 +23,7 @@ export const createTaskSchema = z.object({
   dueDate: z.string().datetime().optional(),
   labels: z.array(z.string()).optional(),
   assigneeIds: z.array(z.string()).optional(),
+  estimatedMinutes: z.number().int().min(0).optional(),
 });
 
 export const updateTaskSchema = createTaskSchema.partial().omit({ position: true });
@@ -29,6 +34,7 @@ export const moveTaskSchema = z.object({
 });
 
 export type CreateBoardInput = z.infer<typeof createBoardSchema>;
+export type UpdateBoardInput = z.infer<typeof updateBoardSchema>;
 export type CreateListInput = z.infer<typeof createListSchema>;
 export type UpdateListInput = z.infer<typeof updateListSchema>;
 export type CreateTaskInput = z.infer<typeof createTaskSchema>;

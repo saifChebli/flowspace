@@ -4,13 +4,14 @@ import Link from 'next/link';
 import { useParams, usePathname } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import api from '@/lib/api';
-import type { Project } from '@/types';
+import type { Project, DashboardData } from '@/types';
 
 const TABS = [
   { label: 'Dashboard', href: '' },
   { label: 'Board', href: '/board' },
   { label: 'Channels', href: '/channels' },
   { label: 'Files', href: '/files' },
+  { label: 'Portal', href: '/portal' },
   { label: 'Settings', href: '/settings' },
 ];
 
@@ -26,11 +27,16 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         .then((response) => response.data),
   });
 
+  const { data: dashboard } = useQuery<DashboardData>({
+    queryKey: ['dashboard', projectId],
+    queryFn: () => api.get<DashboardData>(`/projects/${projectId}/dashboard`).then((r) => r.data),
+  });
+
   const base = `/${workspaceSlug}/${projectId}`;
 
   return (
     <div className="flex h-full flex-col gap-4">
-      <header className="glass-card rounded-[2rem] px-5 py-5 md:px-7">
+      <header className="glass-card rounded-xl px-5 py-4 md:px-7">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
@@ -45,9 +51,22 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
           </div>
 
           <div className="grid grid-cols-3 gap-3 sm:w-[360px]">
-            <ProjectMetric value="14" label="Open items" />
-            <ProjectMetric value="6" label="Members" />
-            <ProjectMetric value="92%" label="Momentum" />
+            <ProjectMetric
+              value={dashboard ? String(dashboard.stats.openTasks) : '–'}
+              label="Open items"
+            />
+            <ProjectMetric
+              value={dashboard ? String(dashboard.stats.members) : '–'}
+              label="Members"
+            />
+            <ProjectMetric
+              value={
+                dashboard && dashboard.stats.totalTasks > 0
+                  ? `${Math.round((dashboard.stats.completedTasks / dashboard.stats.totalTasks) * 100)}%`
+                  : '–'
+              }
+              label="Momentum"
+            />
           </div>
         </div>
 
@@ -79,7 +98,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
 
 function ProjectMetric({ value, label }: { value: string; label: string }) {
   return (
-    <div className="rounded-[1.2rem] border border-border/80 bg-white/65 px-4 py-3 text-center">
+    <div className="rounded-xl border border-border/80 bg-white/65 px-4 py-3 text-center">
       <div className="text-xl font-bold tracking-tight">{value}</div>
       <div className="mt-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         {label}

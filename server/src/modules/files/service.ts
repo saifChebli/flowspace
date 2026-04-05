@@ -1,10 +1,13 @@
-import { v4 as uuidv4 } from 'uuid';
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { storageConfig } from '../../config/storage';
-import { getPresignedUploadUrl, getPresignedDownloadUrl, buildS3Url } from '../../lib/s3';
-import type { PresignUploadInput } from './schema';
+import { generateUploadSignature, buildCloudinaryUrl, deleteCloudinaryAsset } from '../../lib/cloudinary';
+import { io } from '../../server';
+import type { PresignUploadInput, ConfirmUploadInput } from './schema';
 
+/**
+ * Return a Cloudinary signed-upload payload so the client can upload directly.
+ */
 export async function presignUpload(projectId: string, userId: string, input: PresignUploadInput) {
   await assertProjectMember(projectId, userId);
 
@@ -12,20 +15,21 @@ export async function presignUpload(projectId: string, userId: string, input: Pr
     throw new AppError(415, 'Unsupported file type');
   }
 
-  const key = `projects/${projectId}/${uuidv4()}/${input.name}`;
-  const uploadUrl = await getPresignedUploadUrl(key, input.mimeType);
+  const folder = `${storageConfig.cloudinary.folder}/projects/${projectId}`;
+  const signatureData = generateUploadSignature(folder);
 
-  return { uploadUrl, key };
+  return signatureData;
 }
 
+/**
+ * After the client uploads to Cloudinary, it sends back the public_id + secure_url.
+ */
 export async function confirmUpload(
   projectId: string,
   userId: string,
-  input: PresignUploadInput & { key: string }
+  input: ConfirmUploadInput,
 ) {
   await assertProjectMember(projectId, userId);
-
-  const url = buildS3Url(input.key);
 
   const file = await prisma.file.create({
     data: {
@@ -34,11 +38,35 @@ export async function confirmUpload(
       name: input.name,
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
-      storage: 'S3',
-      storageKey: input.key,
-      url,
+      storage: 'CLOUDINARY',
+      storageKey: input.publicId,
+      url: input.secureUrl,
     },
   });
+
+  // ─── Notify project members about new file ─────────────────────────
+  const members = await prisma.projectMember.findMany({
+    where: { projectId },
+    select: { userId: true },
+  });
+
+  const recipientIds = members.map((m) => m.userId).filter((id) => id !== userId);
+
+  if (recipientIds.length > 0) {
+    await prisma.notification.createMany({
+      data: recipientIds.map((recipientId) => ({
+        recipientId,
+        actorId: userId,
+        type: 'FILE_UPLOADED' as const,
+        meta: { fileId: file.id, fileName: file.name, projectId },
+      })),
+    });
+
+    // Push via Socket.io
+    for (const rid of recipientIds) {
+      io.to(`user:${rid}`).emit('notification:new');
+    }
+  }
 
   return file;
 }
@@ -58,8 +86,8 @@ export async function getFileDownloadUrl(fileId: string, userId: string) {
   if (!file) throw new AppError(404, 'File not found');
   await assertProjectMember(file.projectId, userId);
 
-  const url = await getPresignedDownloadUrl(file.storageKey);
-  return { url };
+  // Cloudinary secure URLs are public, return directly
+  return { url: file.url };
 }
 
 async function assertProjectMember(projectId: string, userId: string) {

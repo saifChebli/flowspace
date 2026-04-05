@@ -11,7 +11,9 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    res.json(await svc.getChannels(req.params.projectId, req.user!.id));
+    const userId = req.user?.id ?? req.portalUser?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    res.json(await svc.getChannels(req.params.projectId, userId));
   } catch (err) { next(err); }
 }
 
@@ -25,5 +27,29 @@ export async function update(req: Request, res: Response, next: NextFunction) {
 export async function remove(req: Request, res: Response, next: NextFunction) {
   try {
     res.json(await svc.deleteChannel(req.params.channelId, req.user!.id));
+  } catch (err) { next(err); }
+}
+
+export async function markRead(req: Request, res: Response, next: NextFunction) {
+  try {
+    const userId = req.user?.id ?? req.portalUser?.userId;
+    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
+    res.json(await svc.markChannelRead(req.params.channelId, userId));
+  } catch (err) { next(err); }
+}
+
+export async function join(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await svc.joinChannel(req.params.channelId, req.user!.id));
+  } catch (err) { next(err); }
+}
+
+export async function addMember(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { userId } = req.body;
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    res.json(await svc.addChannelMember(req.params.channelId, req.user!.id, userId));
   } catch (err) { next(err); }
 }
