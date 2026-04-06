@@ -396,9 +396,7 @@ export default function ProjectSettingsPage() {
                 )}
                 {canManage && m.userId !== currentUser?.id && (
                   <button
-                    onClick={() => {
-                      if (confirm(`Remove ${m.user.name}?`)) removeMember.mutate(m.userId);
-                    }}
+                    onClick={() => toast(`Remove ${m.user.name}?`, { action: { label: 'Remove', onClick: () => removeMember.mutate(m.userId) } })}
                     className="secondary-button min-h-0 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/5"
                   >
                     Remove
@@ -443,10 +441,7 @@ export default function ProjectSettingsPage() {
                   <Copy className="h-3.5 w-3.5" /> Copy link
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm('Revoke this portal token? All active client sessions will be invalidated.'))
-                      revokePortal.mutate();
-                  }}
+                  onClick={() => toast('Revoke this portal token? All active client sessions will be invalidated.', { action: { label: 'Revoke', onClick: () => revokePortal.mutate() } })}
                   disabled={revokePortal.isPending}
                   className="secondary-button flex items-center gap-1.5 border-destructive/30 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-40"
                 >
@@ -492,10 +487,7 @@ export default function ProjectSettingsPage() {
                 later.
               </p>
               <button
-                onClick={() => {
-                  if (confirm('Archive this project? It will be hidden from the sidebar.'))
-                    archiveProject.mutate();
-                }}
+                onClick={() => toast('Archive this project? It will be hidden from the sidebar.', { action: { label: 'Archive', onClick: () => archiveProject.mutate() } })}
                 disabled={archiveProject.isPending}
                 className="secondary-button mt-4 min-h-0 border-destructive/30 px-4 py-2 text-sm text-destructive hover:bg-destructive/10 disabled:opacity-40"
               >

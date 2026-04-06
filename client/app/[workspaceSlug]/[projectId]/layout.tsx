@@ -7,12 +7,12 @@ import api from '@/lib/api';
 import type { Project, DashboardData } from '@/types';
 
 const TABS = [
-  { label: 'Dashboard', href: '' },
-  { label: 'Board', href: '/board' },
-  { label: 'Channels', href: '/channels' },
-  { label: 'Files', href: '/files' },
-  { label: 'Portal', href: '/portal' },
-  { label: 'Settings', href: '/settings' },
+  { label: 'Dashboard', href: '', clientVisible: true },
+  { label: 'Board', href: '/board', clientVisible: true },
+  { label: 'Channels', href: '/channels', clientVisible: true },
+  { label: 'Files', href: '/files', clientVisible: true },
+  { label: 'Portal', href: '/portal', clientVisible: false },
+  { label: 'Settings', href: '/settings', clientVisible: false },
 ];
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
@@ -32,6 +32,9 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     queryFn: () => api.get<DashboardData>(`/projects/${projectId}/dashboard`).then((r) => r.data),
   });
 
+  const isClient = dashboard?.role === 'CLIENT';
+  const visibleTabs = TABS.filter((tab) => !isClient || tab.clientVisible);
+
   const base = `/${workspaceSlug}/${projectId}`;
 
   return (
@@ -40,13 +43,15 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
-              Project cockpit
+              {isClient ? 'Client view' : 'Project cockpit'}
             </div>
             <h1 className="mt-2 text-3xl font-bold tracking-tight md:text-4xl">
               {project?.name ?? 'Project'}
             </h1>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Monitor delivery health, move tasks, manage channels, and keep the client experience intentional.
+              {isClient
+                ? 'Track your project progress, communicate with the team, and access shared files.'
+                : 'Monitor delivery health, move tasks, manage channels, and keep the client experience intentional.'}
             </p>
           </div>
 
@@ -71,7 +76,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         </div>
 
         <nav className="mt-6 flex flex-wrap gap-2">
-          {TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const href = `${base}${tab.href}`;
             const isActive = tab.href === '' ? pathname === base : pathname.startsWith(href);
             return (

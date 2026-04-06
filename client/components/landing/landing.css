@@ -5,18 +5,18 @@
 /* ── Dark Theme Variables ──────────────────────────────────── */
 
 .landing {
-  --lp-bg: #0a0a0f;
-  --lp-bg-surface: #111118;
-  --lp-bg-elevated: #1a1a24;
-  --lp-border: rgba(255, 255, 255, 0.08);
-  --lp-border-hover: rgba(255, 255, 255, 0.15);
-  --lp-text: #f0f0f5;
-  --lp-text-secondary: #9090a0;
-  --lp-text-muted: #606070;
+  --lp-bg: #f6f1e8;
+  --lp-bg-surface: #fffaf1;
+  --lp-bg-elevated: #f0e3cf;
+  --lp-border: #d6c8b1;
+  --lp-border-hover: rgba(23, 32, 51, 0.18);
+  --lp-text: #172033;
+  --lp-text-secondary: #41506b;
+  --lp-text-muted: #6f6b66;
   --lp-accent: #0f766e;
   --lp-accent-2: #b7791f;
-  --lp-accent-glow: rgba(15, 118, 110, 0.3);
-  --lp-accent-2-glow: rgba(183, 121, 31, 0.3);
+  --lp-accent-glow: rgba(15, 118, 110, 0.25);
+  --lp-accent-2-glow: rgba(183, 121, 31, 0.25);
   --font-instrument-serif: "Instrument Serif", serif;
 
   background: var(--lp-bg);
@@ -29,7 +29,7 @@
 }
 
 .landing *::selection {
-  background: rgba(15, 118, 110, 0.3);
+  background: rgba(15, 118, 110, 0.18);
 }
 
 /* ── Keyframe Animations ───────────────────────────────────── */
@@ -109,7 +109,7 @@
   height: 64px;
   display: flex;
   align-items: center;
-  background: rgba(10, 10, 15, 0.85);
+  background: rgba(246, 241, 232, 0.88);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border-bottom: 1px solid var(--lp-border);
@@ -180,21 +180,21 @@
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.1),
+    rgba(255, 255, 255, 0.18),
     transparent
   );
   animation: lp-shimmer 3s ease-in-out infinite;
 }
 
 .lp-cta-outline {
-  background: transparent;
+  background: rgba(255, 250, 241, 0.86);
   color: var(--lp-text);
-  border: 1px solid var(--lp-border-hover);
+  border: 1px solid var(--lp-border);
 }
 
 .lp-cta-outline:hover {
   border-color: var(--lp-accent);
-  background: rgba(15, 118, 110, 0.05);
+  background: rgba(216, 239, 232, 0.4);
   transform: scale(1.02);
 }
 
@@ -205,10 +205,11 @@
 /* ── Browser Mockup Chrome ─────────────────────────────────── */
 
 .lp-chrome {
-  background: var(--lp-bg-elevated);
+  background: rgba(255, 250, 241, 0.82);
   border: 1px solid var(--lp-border);
   border-radius: 12px;
   overflow: hidden;
+  box-shadow: 0 8px 32px rgba(23, 32, 51, 0.08);
 }
 
 .lp-chrome-bar {
@@ -216,15 +217,16 @@
   align-items: center;
   gap: 8px;
   padding: 10px 16px;
-  background: var(--lp-bg-surface);
+  background: rgba(240, 227, 207, 0.6);
   border-bottom: 1px solid var(--lp-border);
 }
 
 .lp-chrome-url {
   flex: 1;
   text-align: center;
-  background: var(--lp-bg-elevated);
+  background: rgba(255, 250, 241, 0.8);
   border-radius: 6px;
+  border: 1px solid var(--lp-border);
   padding: 4px 12px;
   font-size: 11px;
   color: var(--lp-text-muted);
@@ -246,7 +248,7 @@
   height: 40px;
   background: linear-gradient(
     to bottom,
-    rgba(15, 118, 110, 0.06),
+    rgba(15, 118, 110, 0.08),
     transparent
   );
   filter: blur(8px);
@@ -283,7 +285,7 @@
   position: fixed;
   inset: 0;
   z-index: 150;
-  background: rgba(10, 10, 15, 0.98);
+  background: rgba(246, 241, 232, 0.98);
   backdrop-filter: blur(20px);
   transform: translateY(-100%);
   transition: transform 0.3s ease-out;
@@ -302,7 +304,7 @@
 
 .lp-grid-bg {
   position: relative;
-  background: linear-gradient(135deg, #0d0d18 0%, #111828 50%, #0d0d18 100%);
+  background: linear-gradient(135deg, #ede2d1 0%, #d8efe8 50%, #ede2d1 100%);
 }
 
 .lp-grid-bg::before {
@@ -311,15 +313,15 @@
   inset: 0;
   background-image: repeating-linear-gradient(
       0deg,
-      rgba(255, 255, 255, 0.02) 0px,
-      rgba(255, 255, 255, 0.02) 1px,
+      rgba(23, 32, 51, 0.04) 0px,
+      rgba(23, 32, 51, 0.04) 1px,
       transparent 1px,
       transparent 40px
     ),
     repeating-linear-gradient(
       90deg,
-      rgba(255, 255, 255, 0.02) 0px,
-      rgba(255, 255, 255, 0.02) 1px,
+      rgba(23, 32, 51, 0.04) 0px,
+      rgba(23, 32, 51, 0.04) 1px,
       transparent 1px,
       transparent 40px
     );
@@ -329,18 +331,19 @@
 /* ── Pricing Featured Card ─────────────────────────────────── */
 
 .lp-pricing-featured {
-  border: 1px solid rgba(15, 118, 110, 0.4) !important;
+  border: 1px solid rgba(15, 118, 110, 0.35) !important;
   background: linear-gradient(
     135deg,
-    var(--lp-bg-elevated) 0%,
-    rgba(15, 118, 110, 0.05) 100%
+    rgba(255, 250, 241, 0.95) 0%,
+    rgba(216, 239, 232, 0.5) 100%
   ) !important;
+  box-shadow: 0 8px 32px rgba(15, 118, 110, 0.1);
 }
 
 /* ── Task Card in Mockup ───────────────────────────────────── */
 
 .lp-task-card {
-  background: var(--lp-bg-elevated);
+  background: rgba(255, 250, 241, 0.9);
   border: 1px solid var(--lp-border);
   border-radius: 8px;
   padding: 10px 12px;
@@ -355,7 +358,7 @@
   font-weight: 600;
   padding: 4px 14px;
   border-radius: 100px;
-  background: rgba(15, 118, 110, 0.1);
+  background: rgba(216, 239, 232, 0.9);
   color: var(--lp-accent);
   border: 1px solid rgba(15, 118, 110, 0.25);
 }

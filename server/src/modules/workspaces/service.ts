@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { AppError } from '../../middleware/errorHandler';
+import { io } from '../../server';
 import { env } from '../../config/env';
 import type { CreateWorkspaceInput, UpdateWorkspaceInput, InviteMemberInput, UpdateMemberRoleInput } from './schema';
 
@@ -138,6 +139,11 @@ export async function acceptInvite(token: string, userId: string) {
   });
   if (exists) throw new AppError(409, 'Already a member');
 
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: invite.workspaceId },
+    select: { slug: true },
+  });
+
   await prisma.$transaction([
     prisma.workspaceMember.create({
       data: { workspaceId: invite.workspaceId, userId, role: invite.role as 'ADMIN' | 'MEMBER' },
@@ -145,7 +151,20 @@ export async function acceptInvite(token: string, userId: string) {
     prisma.inviteToken.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } }),
   ]);
 
-  return { workspaceId: invite.workspaceId };
+  // Notify the inviter that their invite was accepted
+  if (invite.createdById) {
+    await prisma.notification.create({
+      data: {
+        recipientId: invite.createdById,
+        actorId: userId,
+        type: 'INVITE_ACCEPTED',
+        meta: { workspaceId: invite.workspaceId },
+      },
+    });
+    io.to(`user:${invite.createdById}`).emit('notification:new');
+  }
+
+  return { workspaceId: invite.workspaceId, slug: workspace?.slug };
 }
 
 export async function removeMember(slug: string, adminId: string, memberId: string) {

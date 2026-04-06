@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
-import { useParams, usePathname } from 'next/navigation';
+import { useState, useEffect } from 'react';
+import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, LogOut, Plus, FolderKanban, Archive, Settings, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
 import api from '@/lib/api';
@@ -14,10 +14,15 @@ import type { Workspace, Project } from '@/types';
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const pathname = usePathname();
-  const { user, logout } = useAuthStore();
+  const router = useRouter();
+  const { user, logout, isAuthenticated } = useAuthStore();
   const [showCreateProject, setShowCreateProject] = useState(false);
   const [showArchived, setShowArchived] = useState(false);
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    if (!isAuthenticated) router.replace('/auth/login');
+  }, [isAuthenticated, router]);
 
   const { data: workspace } = useQuery<Workspace>({
     queryKey: ['workspace', workspaceSlug],
@@ -44,6 +49,12 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
       queryClient.invalidateQueries({ queryKey: ['archived-projects', workspaceSlug] });
     },
   });
+
+  if (!isAuthenticated) return null;
+
+  // If every project role is CLIENT, this user is a client-only participant
+  const isClientOnly =
+    projects && projects.length > 0 && projects.every((p) => p.myRole === 'CLIENT');
 
   return (
     <div className="app-shell flex h-screen overflow-hidden">
@@ -89,13 +100,15 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
               <span className="rounded-full bg-accent-soft px-2 py-0.5 text-[10px] font-bold text-accent">
                 {projects?.length ?? 0}
               </span>
-              <button
-                onClick={() => setShowCreateProject(true)}
-                className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent/80"
-                title="New project"
-              >
-                <Plus className="h-3.5 w-3.5" />
-              </button>
+              {!isClientOnly && (
+                <button
+                  onClick={() => setShowCreateProject(true)}
+                  className="flex h-6 w-6 items-center justify-center rounded-lg bg-accent text-white transition-colors hover:bg-accent/80"
+                  title="New project"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                </button>
+              )}
             </div>
           </div>
 
@@ -117,7 +130,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
                 </Link>
               );
             })}
-            {projects?.length === 0 && (
+            {projects?.length === 0 && !isClientOnly && (
               <button
                 onClick={() => setShowCreateProject(true)}
                 className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border/60 py-4 text-sm font-medium text-muted-foreground transition hover:border-accent/40 hover:text-accent"
@@ -130,6 +143,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Archived toggle */}
+        {!isClientOnly && (
         <div className="mx-3 mt-2">
           <button
             onClick={() => setShowArchived((v) => !v)}
@@ -168,8 +182,10 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             </nav>
           )}
         </div>
+        )}
 
         {/* Bottom settings link */}
+        {!isClientOnly && (
         <div className="mx-3 mt-auto mb-3">
           <Link
             href={`/${workspaceSlug}/settings`}
@@ -179,6 +195,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
             Workspace settings
           </Link>
         </div>
+        )}
       </aside>
 
       <main className="flex-1 overflow-y-auto">

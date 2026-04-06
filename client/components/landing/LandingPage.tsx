@@ -129,12 +129,12 @@ export default function LandingPage() {
       {/* ─── 2 · Hero ────────────────────────────────────────── */}
       <section style={{ position: 'relative', paddingTop: 80, paddingBottom: 60 }}>
         {/* Subtle atmospheric glow */}
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(15,118,110,0.08) 0%, transparent 70%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(15,118,110,0.1) 0%, transparent 70%)', pointerEvents: 'none' }} />
 
         <div style={{ maxWidth: 820, margin: '0 auto', textAlign: 'center', padding: '0 24px', position: 'relative' }}>
           {/* Badge */}
           <div className="lp-hero-item" style={{ marginBottom: 32 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(15,118,110,0.1)', border: '1px solid rgba(15,118,110,0.3)', borderRadius: 100, padding: '6px 16px', fontSize: 13, color: 'var(--lp-accent)' }}>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10, background: 'rgba(216,239,232,0.8)', border: '1px solid rgba(15,118,110,0.25)', borderRadius: 100, padding: '6px 16px', fontSize: 13, color: 'var(--lp-accent)' }}>
               <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--lp-accent)', animation: 'lp-pulse 2s ease-in-out infinite' }} />
               ✦ Now in public beta — free forever plan available
             </span>
@@ -307,11 +307,11 @@ export default function LandingPage() {
         {/* Toggle */}
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginBottom: 48 }}>
           <span style={{ fontSize: 14, color: annual ? 'var(--lp-text-muted)' : 'var(--lp-text)' }}>Monthly</span>
-          <button onClick={() => setAnnual((v) => !v)} style={{ width: 48, height: 26, borderRadius: 13, border: 'none', background: annual ? 'var(--lp-accent)' : 'var(--lp-bg-elevated)', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
+          <button onClick={() => setAnnual((v) => !v)} style={{ width: 48, height: 26, borderRadius: 13, border: '1px solid var(--lp-border)', background: annual ? 'var(--lp-accent)' : 'var(--lp-bg-surface)', cursor: 'pointer', position: 'relative', transition: 'background 0.2s' }}>
             <span style={{ position: 'absolute', width: 20, height: 20, borderRadius: '50%', background: 'white', top: 3, transition: 'left 0.2s', left: annual ? 25 : 3 }} />
           </button>
           <span style={{ fontSize: 14, color: annual ? 'var(--lp-text)' : 'var(--lp-text-muted)' }}>Annual</span>
-          {annual && <span style={{ fontSize: 11, fontWeight: 700, background: 'rgba(15,118,110,0.15)', color: 'var(--lp-accent)', padding: '3px 10px', borderRadius: 100 }}>Save 20%</span>}
+          {annual && <span style={{ fontSize: 11, fontWeight: 700, background: 'rgba(216,239,232,0.9)', color: 'var(--lp-accent)', padding: '3px 10px', borderRadius: 100 }}>Save 20%</span>}
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, maxWidth: 1000, margin: '0 auto' }}>
@@ -549,9 +549,9 @@ function PricingCard({
 const S = {
   app: { display: 'flex', minHeight: 360 } as const,
   sidebar: { width: 200, background: 'var(--lp-bg-surface)', borderRight: '1px solid var(--lp-border)', padding: '16px 12px', flexShrink: 0 } as const,
-  panel: { flex: 1, padding: 16, overflow: 'hidden' } as const,
+  panel: { flex: 1, padding: 16, overflow: 'hidden', background: 'rgba(255,250,241,0.5)' } as const,
   sideLabel: { fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--lp-text-muted)', marginBottom: 8 } as const,
-  sideItem: (active?: boolean) => ({ padding: '6px 10px', borderRadius: 6, fontSize: 13, color: active ? 'var(--lp-text)' : 'var(--lp-text-secondary)', background: active ? 'rgba(15,118,110,0.12)' : 'transparent', marginBottom: 2, cursor: 'default' }),
+  sideItem: (active?: boolean) => ({ padding: '6px 10px', borderRadius: 6, fontSize: 13, color: active ? 'var(--lp-text)' : 'var(--lp-text-secondary)', background: active ? 'rgba(216,239,232,0.8)' : 'transparent', marginBottom: 2, cursor: 'default' }),
   dot: (c: string) => ({ width: 6, height: 6, borderRadius: '50%', background: c, flexShrink: 0 }),
   av: (bg: string, size = 18) => ({ width: size, height: size, borderRadius: '50%', background: bg, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.55, fontWeight: 700, color: 'white', flexShrink: 0 }),
 } as const;
@@ -621,7 +621,7 @@ function HeroBrowserMockup() {
 
 function KanbanCol({ title, count, highlight, children }: { title: string; count: number; highlight?: boolean; children: React.ReactNode }) {
   return (
-    <div style={{ background: highlight ? 'rgba(15,118,110,0.04)' : 'transparent', borderRadius: 8, padding: 10 }}>
+      <div style={{ background: highlight ? 'rgba(216,239,232,0.5)' : 'transparent', borderRadius: 8, padding: 10 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
         <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: 'var(--lp-text-secondary)' }}>{title}</span>
         <span style={{ fontSize: 11, color: 'var(--lp-text-muted)' }}>{count}</span>
@@ -669,14 +669,14 @@ function ChannelMockup() {
         <div style={S.panel}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, paddingBottom: 12, borderBottom: '1px solid var(--lp-border)' }}>
             <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--lp-text)' }}># client-updates</span>
-            <span style={{ fontSize: 10, background: 'rgba(15,118,110,0.15)', color: 'var(--lp-accent)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Client-visible</span>
+            <span style={{ fontSize: 10, background: 'rgba(216,239,232,0.9)', color: 'var(--lp-accent)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Client-visible</span>
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
             <ChatMsg av="MJ" bg="#0f766e" name="Marcus" time="2:34 PM">Hey Sarah, the homepage design is ready for review!</ChatMsg>
             <ChatMsg av="SC" bg="#b7791f" name="Sarah Chen" time="2:41 PM" badge="via client portal">This looks fantastic! Love the new hero section. Can we adjust the button colors to match our brand guidelines?</ChatMsg>
             <ChatMsg av="MJ" bg="#0f766e" name="Marcus" time="2:43 PM">On it! Will update and share a new version by tomorrow morning.</ChatMsg>
           </div>
-          <div style={{ marginTop: 16, padding: '10px 12px', background: 'var(--lp-bg-elevated)', borderRadius: 8, border: '1px solid var(--lp-border)', fontSize: 12, color: 'var(--lp-text-muted)' }}>Type a message…</div>
+          <div style={{ marginTop: 16, padding: '10px 12px', background: 'rgba(240,227,207,0.4)', borderRadius: 8, border: '1px solid var(--lp-border)', fontSize: 12, color: 'var(--lp-text-muted)' }}>Type a message…</div>
         </div>
       </div>
     </ChromeWrap>
@@ -719,7 +719,7 @@ function KanbanMockup() {
         </div>
 
         {/* Task detail slide-in */}
-        <div style={{ flex: 1, padding: 16, background: 'var(--lp-bg-elevated)', borderLeft: '1px solid var(--lp-border)' }}>
+        <div style={{ flex: 1, padding: 16, background: 'rgba(240,227,207,0.3)', borderLeft: '1px solid var(--lp-border)' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text)' }}>Redesign homepage hero section</span>
           </div>
@@ -756,11 +756,11 @@ function KanbanMockup() {
 
 function PortalMockup() {
   return (
-    <div className="lp-chrome" style={{ background: '#16161f' }}>
+    <div className="lp-chrome" style={{ background: '#fffaf1' }}>
       {/* Branding bar */}
-      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--lp-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#1a1a26' }}>
+      <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--lp-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(240,227,207,0.5)' }}>
         <span style={{ fontSize: 11, color: 'var(--lp-text-muted)' }}>Powered by CollabSpace · Acme Corp</span>
-        <span style={{ fontSize: 10, background: 'rgba(15,118,110,0.2)', color: 'var(--lp-accent)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Client View</span>
+          <span style={{ fontSize: 10, background: 'rgba(216,239,232,0.9)', color: 'var(--lp-accent)', padding: '2px 8px', borderRadius: 4, fontWeight: 600 }}>Client View</span>
       </div>
 
       <div style={{ padding: 20 }}>
@@ -822,7 +822,7 @@ function ChaosMap() {
 
   return (
     <div style={{ marginTop: 48, position: 'relative' }}>
-      <svg viewBox="0 0 400 200" width="100%" style={{ maxWidth: 600, margin: '0 auto', display: 'block' }}>
+      <svg viewBox="0 0 400 230" width="100%" style={{ maxWidth: 600, margin: '0 auto', display: 'block', overflow: 'visible' }}>
         {/* Chaos lines */}
         <path d="M80 40 C 150 10, 200 80, 280 30" stroke="var(--lp-text-muted)" fill="none" strokeWidth="1" opacity="0.4" />
         <path d="M280 30 C 330 50, 350 90, 350 80" stroke="var(--lp-text-muted)" fill="none" strokeWidth="1" opacity="0.4" />

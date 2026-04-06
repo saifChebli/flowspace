@@ -45,17 +45,18 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
     },
   });
 
-  // Create mention notifications
-  if (input.mentionedUserIds?.length) {
+  // Create mention notifications (exclude self-mentions)
+  const mentionRecipients = input.mentionedUserIds?.filter((uid) => uid !== authorId) ?? [];
+  if (mentionRecipients.length > 0) {
     await prisma.notification.createMany({
-      data: input.mentionedUserIds.map((userId) => ({
+      data: mentionRecipients.map((userId) => ({
         recipientId: userId,
         actorId: authorId,
         type: 'MESSAGE_MENTIONED' as const,
         meta: { channelId, messageId: message.id },
       })),
     });
-    for (const uid of input.mentionedUserIds) {
+    for (const uid of mentionRecipients) {
       io.to(`user:${uid}`).emit('notification:new');
     }
   }

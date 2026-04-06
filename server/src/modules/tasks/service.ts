@@ -8,7 +8,7 @@ export async function createTask(listId: string, userId: string, input: CreateTa
   const list = await prisma.boardList.findUnique({ where: { id: listId }, include: { board: true } });
   if (!list) throw new AppError(404, 'List not found');
 
-  await assertProjectMember(list.board.projectId, userId);
+  await assertTeamMember(list.board.projectId, userId);
 
   const { assigneeIds, ...taskData } = input;
 
@@ -63,7 +63,7 @@ export async function getTask(taskId: string, userId: string) {
 export async function updateTask(taskId: string, userId: string, input: UpdateTaskInput) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertProjectMember(task.list.board.projectId, userId);
+  await assertTeamMember(task.list.board.projectId, userId);
 
   const { assigneeIds, ...taskData } = input;
 
@@ -109,7 +109,7 @@ export async function updateTask(taskId: string, userId: string, input: UpdateTa
 export async function moveTask(taskId: string, userId: string, input: MoveTaskInput) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertProjectMember(task.list.board.projectId, userId);
+  await assertTeamMember(task.list.board.projectId, userId);
 
   return prisma.task.update({
     where: { id: taskId },
@@ -120,7 +120,7 @@ export async function moveTask(taskId: string, userId: string, input: MoveTaskIn
 export async function deleteTask(taskId: string, userId: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertProjectMember(task.list.board.projectId, userId);
+  await assertTeamMember(task.list.board.projectId, userId);
 
   await prisma.task.delete({ where: { id: taskId } });
   return { message: 'Task deleted' };
@@ -129,7 +129,7 @@ export async function deleteTask(taskId: string, userId: string) {
 export async function addComment(taskId: string, authorId: string, body: string) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertProjectMember(task.list.board.projectId, authorId);
+  await assertTeamMember(task.list.board.projectId, authorId);
 
   return prisma.taskComment.create({
     data: { taskId, authorId, body },
@@ -167,7 +167,7 @@ export async function deleteComment(commentId: string, userId: string) {
 export async function addTimeEntry(taskId: string, userId: string, input: TimeEntryInput) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertProjectMember(task.list.board.projectId, userId);
+  await assertTeamMember(task.list.board.projectId, userId);
 
   return prisma.taskTimeEntry.create({
     data: {
@@ -198,5 +198,11 @@ async function assertProjectMember(projectId: string, userId: string) {
     where: { projectId_userId: { projectId, userId } },
   });
   if (!member) throw new AppError(403, 'Not a project member');
+  return member;
+}
+
+async function assertTeamMember(projectId: string, userId: string) {
+  const member = await assertProjectMember(projectId, userId);
+  if (member.role === 'CLIENT') throw new AppError(403, 'Clients cannot modify task data');
   return member;
 }

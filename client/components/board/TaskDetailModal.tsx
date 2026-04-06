@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
+import { toast } from 'sonner';
 import type { Task, TaskComment, TaskTimeEntry, Project } from '@/types';
 
 const PRIORITY_OPTIONS = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'] as const;
@@ -441,7 +442,7 @@ export default function TaskDetailModal({ taskId, projectId, onClose }: Props) {
                                   Edit
                                 </button>
                                 <button
-                                  onClick={() => { if (confirm('Delete comment?')) deleteComment.mutate(c.id); }}
+                                  onClick={() => toast('Delete this comment?', { action: { label: 'Delete', onClick: () => deleteComment.mutate(c.id) } })}
                                   className="flex h-7 items-center rounded-lg px-2 text-xs text-destructive/60 transition hover:bg-destructive/8 hover:text-destructive"
                                 >
                                   Delete
@@ -724,7 +725,7 @@ export default function TaskDetailModal({ taskId, projectId, onClose }: Props) {
                 <div />
               )}
               <button
-                onClick={() => { if (confirm('Delete this task?')) deleteTask.mutate(); }}
+                onClick={() => toast('Delete this task?', { action: { label: 'Delete', onClick: () => deleteTask.mutate() } })}
                 disabled={deleteTask.isPending}
                 className="flex h-9 items-center gap-1.5 rounded-xl border border-destructive/30 px-4 text-sm font-semibold text-destructive transition hover:bg-destructive/5 disabled:opacity-50"
               >

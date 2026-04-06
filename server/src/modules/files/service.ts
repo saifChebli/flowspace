@@ -9,7 +9,7 @@ import type { PresignUploadInput, ConfirmUploadInput } from './schema';
  * Return a Cloudinary signed-upload payload so the client can upload directly.
  */
 export async function presignUpload(projectId: string, userId: string, input: PresignUploadInput) {
-  await assertProjectMember(projectId, userId);
+  await assertTeamMember(projectId, userId);
 
   if (!storageConfig.allowedMimeTypes.includes(input.mimeType as never)) {
     throw new AppError(415, 'Unsupported file type');
@@ -29,7 +29,7 @@ export async function confirmUpload(
   userId: string,
   input: ConfirmUploadInput,
 ) {
-  await assertProjectMember(projectId, userId);
+  await assertTeamMember(projectId, userId);
 
   const file = await prisma.file.create({
     data: {
@@ -95,5 +95,11 @@ async function assertProjectMember(projectId: string, userId: string) {
     where: { projectId_userId: { projectId, userId } },
   });
   if (!member) throw new AppError(403, 'Not a project member');
+  return member;
+}
+
+async function assertTeamMember(projectId: string, userId: string) {
+  const member = await assertProjectMember(projectId, userId);
+  if (member.role === 'CLIENT') throw new AppError(403, 'Clients cannot upload files');
   return member;
 }

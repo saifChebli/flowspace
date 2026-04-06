@@ -1,33 +1,69 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import { LogIn, Eye, MessageSquare } from 'lucide-react';
+import Logo from '@/components/ui/Logo';
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { login } = useAuthStore();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawRedirect = searchParams.get('redirect');
+  const redirectTo = rawRedirect?.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    if (!email.trim()) {
+      setError('Please enter your email address.');
+      toast.error('Please enter your email address.');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Please enter a valid email address.');
+      toast.error('Please enter a valid email address.');
+      return;
+    }
+    if (!password) {
+      setError('Please enter your password.');
+      toast.error('Please enter your password.');
+      return;
+    }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.');
+      toast.error('Password must be at least 6 characters.');
+      return;
+    }
+
     setLoading(true);
     try {
       await login(email, password);
-      toast.success('Welcome back!');
-      router.push('/dashboard');
+      toast.success('Welcome back! Redirecting…');
+      router.push(redirectTo || '/dashboard');
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Login failed. Please try again.';
+        'Unable to sign in. Please check your credentials and try again.';
       setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -60,6 +96,7 @@ export default function LoginPage() {
 
         <div className="glass-card w-full rounded-2xl p-7 md:p-10">
           <div className="mb-8">
+            <div className="mb-4"><Logo /></div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
               Sign in
             </div>

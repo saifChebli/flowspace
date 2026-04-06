@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import type { DashboardData } from '@/types';
 
 interface FileRecord {
   id: string;
@@ -46,6 +47,13 @@ export default function ProjectFilesPage() {
     queryKey: ['files', projectId],
     queryFn: () => api.get(`/projects/${projectId}/files`).then((r) => r.data),
   });
+
+  const { data: dashboard } = useQuery<DashboardData>({
+    queryKey: ['dashboard', projectId],
+    queryFn: () => api.get<DashboardData>(`/projects/${projectId}/dashboard`).then((r) => r.data),
+  });
+
+  const isClient = dashboard?.role === 'CLIENT';
 
   const download = useMutation({
     mutationFn: (fileId: string) =>
@@ -133,9 +141,10 @@ export default function ProjectFilesPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">Files</p>
             <h2 className="mt-1 text-xl font-bold">Project files</h2>
             <p className="mt-1 text-sm text-muted-foreground">
-              Upload and share files with your team and clients.
+              {isClient ? 'View and download shared project files.' : 'Upload and share files with your team and clients.'}
             </p>
           </div>
+          {!isClient && (
           <div>
             <input
               ref={fileInputRef}
@@ -160,6 +169,7 @@ export default function ProjectFilesPage() {
               </div>
             )}
           </div>
+          )}
         </div>
         {uploadError && (
           <div className="mt-3 rounded-xl bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -178,12 +188,14 @@ export default function ProjectFilesPage() {
         <div className="panel-card flex flex-col items-center justify-center rounded-xl py-16 text-center">
           <div className="mb-3 text-4xl">📁</div>
           <p className="text-sm text-muted-foreground">No files uploaded yet.</p>
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="mt-4 secondary-button px-4 py-2 text-sm"
-          >
-            Upload the first file
-          </button>
+          {!isClient && (
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="mt-4 secondary-button px-4 py-2 text-sm"
+            >
+              Upload the first file
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

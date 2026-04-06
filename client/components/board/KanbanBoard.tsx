@@ -52,9 +52,10 @@ const LIST_ACCENTS = [
 interface KanbanBoardProps {
   board: Board;
   projectId: string;
+  readOnly?: boolean;
 }
 
-export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
+export default function KanbanBoard({ board, projectId, readOnly = false }: KanbanBoardProps) {
   const queryClient = useQueryClient();
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const [addingList, setAddingList] = useState(false);
@@ -89,7 +90,7 @@ export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
 
   // ─── DnD sensors ──────────────────────────────────────────────────────
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: readOnly ? Infinity : 5 } })
   );
 
   // Build a flat map of taskId → task for quick lookup
@@ -283,11 +284,12 @@ export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
                 accentClass={LIST_ACCENTS[index % LIST_ACCENTS.length]}
                 onTaskClick={setSelectedTaskId}
                 members={members}
+                readOnly={readOnly}
               />
             ))}
           </SortableContext>
 
-          {addingList ? (
+          {!readOnly && (addingList ? (
             <form
               onSubmit={handleAddList}
               className="soft-card flex w-[300px] shrink-0 flex-col gap-3 rounded-xl border-dashed p-4"
@@ -331,7 +333,7 @@ export default function KanbanBoard({ board, projectId }: KanbanBoardProps) {
                 Create a new column for another stage, review lane, or backlog slice.
               </span>
             </button>
-          )}
+          ))}
         </div>
 
         <DragOverlay dropAnimation={null}>
@@ -358,12 +360,14 @@ function KanbanList({
   accentClass,
   onTaskClick,
   members,
+  readOnly = false,
 }: {
   list: BoardList;
   projectId: string;
   accentClass: string;
   onTaskClick: (taskId: string) => void;
   members: { user: { id: string; name: string; avatarUrl: string | null }; role: string }[];
+  readOnly?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [adding, setAdding] = useState(false);
@@ -431,7 +435,7 @@ function KanbanList({
             </div>
           )}
 
-          {adding ? (
+          {!readOnly && (adding ? (
             <form onSubmit={handleAddTask} className="soft-row mt-1 flex flex-col gap-3 rounded-lg p-3">
               <textarea
                 autoFocus
@@ -495,7 +499,7 @@ function KanbanList({
             >
               <Plus className="h-3.5 w-3.5" /> Add a card
             </button>
-          )}
+          ))}
         </div>
       </section>
     </SortableContext>

@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { MessageSquare, Pencil, Trash2, X, Send } from 'lucide-react';
+import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { useSocket } from '@/hooks/useSocket';
@@ -155,7 +156,7 @@ export default function MessageBubble({
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                     <button
-                      onClick={() => { if (confirm('Delete this message?')) deleteMutation.mutate(); }}
+                      onClick={() => toast('Delete this message?', { action: { label: 'Delete', onClick: () => deleteMutation.mutate() } })}
                       className="rounded-md p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                       title="Delete"
                     >

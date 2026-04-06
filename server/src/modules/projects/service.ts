@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { io } from '../../server';
 import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput, UpdateProjectMemberRoleInput } from './schema';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { env } from '../../config/env';
@@ -22,6 +23,16 @@ export async function createProject(workspaceSlug: string, userId: string, input
   const workspace = await getWorkspaceBySlug(workspaceSlug);
   assertWorkspaceMember(workspace.members, userId);
 
+  // Block client-only users from creating projects
+  const userProjectRoles = await prisma.projectMember.findMany({
+    where: { project: { workspaceId: workspace.id }, userId },
+    select: { role: true },
+  });
+  const isClientOnly = userProjectRoles.length > 0 && userProjectRoles.every((m) => m.role === 'CLIENT');
+  if (isClientOnly && !isWorkspaceAdmin(workspace.members, userId)) {
+    throw new AppError(403, 'Client users cannot create projects');
+  }
+
   return prisma.project.create({
     data: {
       workspaceId: workspace.id,
@@ -35,15 +46,23 @@ export async function getProjects(workspaceSlug: string, userId: string) {
   const workspace = await prisma.workspace.findUnique({ where: { slug: workspaceSlug } });
   if (!workspace) throw new AppError(404, 'Workspace not found');
 
-  return prisma.project.findMany({
+  const projects = await prisma.project.findMany({
     where: {
       workspaceId: workspace.id,
       members: { some: { userId } },
       archived: false,
     },
-    include: { _count: { select: { members: true, channels: true, boards: true } } },
+    include: {
+      _count: { select: { members: true, channels: true, boards: true } },
+      members: { where: { userId }, select: { role: true }, take: 1 },
+    },
     orderBy: { createdAt: 'desc' },
   });
+
+  return projects.map(({ members, ...p }) => ({
+    ...p,
+    myRole: members[0]?.role ?? null,
+  }));
 }
 
 export async function getArchivedProjects(workspaceSlug: string, userId: string) {
@@ -188,7 +207,7 @@ export async function inviteProjectMember(projectId: string, inviterId: string, 
     },
   });
 
-  const inviteUrl = `${env.CLIENT_URL}/invites/${invite.token}`;
+  const inviteUrl = `${env.CLIENT_URL}/invite/${invite.token}`;
   await sendEmail({
     to: input.email,
     subject: `You're invited to ${project.name} on CollabSpace`,
@@ -217,14 +236,50 @@ export async function acceptProjectInvite(token: string, userId: string) {
   });
   if (exists) throw new AppError(409, 'Already a project member');
 
-  await prisma.$transaction([
+  const role = invite.role as 'MEMBER' | 'CLIENT';
+
+  const project = await prisma.project.findUnique({
+    where: { id: invite.projectId },
+    include: { workspace: { select: { id: true, slug: true } } },
+  });
+
+  const txOps: any[] = [
     prisma.projectMember.create({
-      data: { projectId: invite.projectId, userId, role: invite.role as 'MEMBER' | 'CLIENT' },
+      data: { projectId: invite.projectId, userId, role },
     }),
     prisma.inviteToken.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } }),
-  ]);
+  ];
 
-  return { projectId: invite.projectId };
+  // Ensure the user has workspace membership so they can access the workspace layout
+  if (project) {
+    const existingWsMember = await prisma.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId: project.workspace.id, userId } },
+    });
+    if (!existingWsMember) {
+      txOps.push(
+        prisma.workspaceMember.create({
+          data: { workspaceId: project.workspace.id, userId, role: 'MEMBER' },
+        }),
+      );
+    }
+  }
+
+  await prisma.$transaction(txOps);
+
+  // Notify the inviter that their invite was accepted
+  if (invite.createdById) {
+    await prisma.notification.create({
+      data: {
+        recipientId: invite.createdById,
+        actorId: userId,
+        type: 'INVITE_ACCEPTED',
+        meta: { projectId: invite.projectId },
+      },
+    });
+    io.to(`user:${invite.createdById}`).emit('notification:new');
+  }
+
+  return { projectId: invite.projectId, role, workspaceSlug: project?.workspace.slug };
 }
 
 export async function getPendingProjectInvites(projectId: string, userId: string) {

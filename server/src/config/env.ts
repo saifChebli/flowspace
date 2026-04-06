@@ -11,7 +11,10 @@ const envSchema = z.object({
   JWT_ACCESS_EXPIRES_IN: z.string().default('15m'),
   JWT_REFRESH_EXPIRES_IN: z.string().default('7d'),
 
-  RESEND_API_KEY: z.string().optional(),
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().default('587').transform(Number),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
   EMAIL_FROM: z.string().email().default('noreply@collabspace.io'),
 
   AWS_REGION: z.string().optional(),
@@ -25,7 +28,7 @@ const envSchema = z.object({
 
   CLIENT_URL: z.string().url().default('http://localhost:3000'),
   RATE_LIMIT_WINDOW_MS: z.string().default('900000').transform(Number),
-  RATE_LIMIT_MAX: z.string().default('100').transform(Number),
+  RATE_LIMIT_MAX: z.string().default('1000').transform(Number),
 });
 
 const parsed = envSchema.safeParse(process.env);

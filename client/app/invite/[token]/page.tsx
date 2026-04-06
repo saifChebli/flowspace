@@ -13,6 +13,7 @@ export default function AcceptInvitePage() {
   const { isAuthenticated } = useAuthStore();
   const [status, setStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [errorMsg, setErrorMsg] = useState('');
+  const [acceptData, setAcceptData] = useState<{ role?: string; workspaceSlug?: string; projectId?: string; slug?: string } | null>(null);
 
   const accept = useMutation({
     mutationFn: () =>
@@ -25,7 +26,10 @@ export default function AcceptInvitePage() {
         }
         throw err;
       }),
-    onSuccess: () => setStatus('success'),
+    onSuccess: (res) => {
+      setAcceptData(res?.data ?? null);
+      setStatus('success');
+    },
     onError: (err: unknown) => {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to accept invite.';
       setErrorMsg(msg);
@@ -77,19 +81,29 @@ export default function AcceptInvitePage() {
   }
 
   if (status === 'success') {
+    const isClient = acceptData?.role === 'CLIENT';
+    // Build redirect URL: project invite → /{workspaceSlug}/{projectId}, workspace invite → /{slug}
+    const destination = acceptData?.workspaceSlug && acceptData?.projectId
+      ? `/${acceptData.workspaceSlug}/${acceptData.projectId}`
+      : acceptData?.slug
+        ? `/${acceptData.slug}`
+        : '/dashboard';
+
     return (
       <div className="hero-grid flex min-h-screen items-center justify-center p-4">
         <div className="glass-card w-full max-w-md rounded-2xl p-8 text-center">
           <div className="mb-4 text-4xl">🎉</div>
           <h2 className="mb-3 text-2xl font-bold">Welcome aboard!</h2>
           <p className="mb-6 text-sm text-muted-foreground">
-            You&apos;ve successfully joined the workspace.
+            {isClient
+              ? 'You\u2019ve joined as a client. Your project team will share a portal link for easy access.'
+              : 'You\u2019ve successfully joined. Redirecting you now\u2026'}
           </p>
           <button
-            onClick={() => router.push('/dashboard')}
+            onClick={() => router.push(destination)}
             className="primary-button px-6 py-3 text-sm"
           >
-            Go to dashboard
+            {isClient ? 'Go to dashboard' : 'Go to project'}
           </button>
         </div>
       </div>

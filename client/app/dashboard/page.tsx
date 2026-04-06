@@ -8,6 +8,7 @@ import { Plus, LogOut, Users, FolderKanban, Briefcase } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import CreateWorkspaceModal from '@/components/workspaces/CreateWorkspaceModal';
+import Logo from '@/components/ui/Logo';
 import type { Workspace } from '@/types';
 
 export default function DashboardPage() {
@@ -26,6 +27,8 @@ export default function DashboardPage() {
     enabled: isAuthenticated,
   });
 
+  const hasAdminWorkspace = workspaces?.some((ws) => ws.members?.[0]?.role === 'ADMIN') ?? false;
+
   if (!isAuthenticated) return null;
 
   return (
@@ -34,7 +37,7 @@ export default function DashboardPage() {
         {/* Top nav */}
         <header className="mb-8 flex items-center justify-between">
           <div>
-            <div className="eyebrow">CollabSpace</div>
+            <Logo />
             <h1 className="mt-2 text-2xl font-bold tracking-tight">
               Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}
             </h1>
@@ -51,13 +54,15 @@ export default function DashboardPage() {
         {/* Workspaces */}
         <div className="mb-5 flex items-center justify-between">
           <h2 className="text-lg font-semibold">Your workspaces</h2>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="primary-button flex items-center gap-1.5 px-4 py-2.5 text-sm"
-          >
-            <Plus className="h-4 w-4" />
-            New workspace
-          </button>
+          {hasAdminWorkspace && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="primary-button flex items-center gap-1.5 px-4 py-2.5 text-sm"
+            >
+              <Plus className="h-4 w-4" />
+              New workspace
+            </button>
+          )}
         </div>
 
         {isLoading ? (
@@ -85,13 +90,15 @@ export default function DashboardPage() {
             {workspaces?.map((ws) => (
               <WorkspaceCard key={ws.id} workspace={ws} />
             ))}
-            <button
-              onClick={() => setShowCreate(true)}
-              className="flex min-h-36 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 bg-white/40 text-sm font-medium text-muted-foreground transition-all hover:border-accent/40 hover:bg-white/70 hover:text-accent"
-            >
-              <Plus className="h-4 w-4" />
-              New workspace
-            </button>
+            {hasAdminWorkspace && (
+              <button
+                onClick={() => setShowCreate(true)}
+                className="flex min-h-36 items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border/60 bg-white/40 text-sm font-medium text-muted-foreground transition-all hover:border-accent/40 hover:bg-white/70 hover:text-accent"
+              >
+                <Plus className="h-4 w-4" />
+                New workspace
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -102,7 +109,7 @@ export default function DashboardPage() {
 }
 
 function WorkspaceCard({ workspace }: { workspace: Workspace }) {
-  const memberRole = (workspace as Workspace & { members?: { role: string }[] }).members?.[0]?.role;
+  const memberRole = workspace.members?.[0]?.role;
 
   return (
     <Link

@@ -14,6 +14,7 @@ export interface Workspace {
   logoUrl: string | null;
   createdAt: string;
   _count?: { members: number; projects: number };
+  members?: { role: 'ADMIN' | 'MEMBER' }[];
 }
 
 export interface Project {
@@ -25,6 +26,7 @@ export interface Project {
   createdAt: string;
   channels?: Channel[];
   members?: ProjectMember[];
+  myRole?: 'MEMBER' | 'CLIENT' | null;
 }
 
 export interface Channel {

@@ -1,13 +1,22 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import api from '@/lib/api';
 import { toast } from 'sonner';
 import { UserPlus } from 'lucide-react';
+import Logo from '@/components/ui/Logo';
 
 export default function RegisterPage() {
+  return (
+    <Suspense>
+      <RegisterInner />
+    </Suspense>
+  );
+}
+
+function RegisterInner() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -15,20 +24,63 @@ export default function RegisterPage() {
   const [success, setSuccess] = useState(false);
   const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const rawRedirect = searchParams.get('redirect');
+  const redirectTo = rawRedirect?.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
+
+    // Client-side validation
+    if (!name.trim() || name.trim().length < 2) {
+      const msg = 'Please enter your full name (at least 2 characters).';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!email.trim()) {
+      const msg = 'Please enter your email address.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      const msg = 'Please enter a valid email address.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (password.length < 8) {
+      const msg = 'Password must be at least 8 characters long.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[A-Z]/.test(password)) {
+      const msg = 'Password must contain at least one uppercase letter.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+    if (!/[0-9]/.test(password)) {
+      const msg = 'Password must contain at least one number.';
+      setError(msg);
+      toast.error(msg);
+      return;
+    }
+
     setLoading(true);
     try {
-      await api.post('/auth/register', { name, email, password });
-      toast.success('Account created! Check your email.');
+      await api.post('/auth/register', { name: name.trim(), email: email.trim(), password });
+      toast.success('Account created! Please check your email to verify your account.');
       setSuccess(true);
     } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Registration failed.';
+        'Registration failed. Please try again or use a different email.';
       setError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -38,6 +90,7 @@ export default function RegisterPage() {
     return (
       <div className="hero-grid flex min-h-screen items-center justify-center p-4 md:p-8">
         <div className="glass-card w-full max-w-lg rounded-2xl p-8 text-center md:p-10">
+          <div className="mb-4 flex justify-center"><Logo /></div>
           <div className="eyebrow mx-auto w-fit">Almost there</div>
           <h2 className="mb-3 mt-5 text-3xl font-bold">Check your inbox</h2>
           <p className="mb-6 text-base leading-7 text-muted-foreground">
@@ -45,7 +98,7 @@ export default function RegisterPage() {
             account.
           </p>
           <button
-            onClick={() => router.push('/auth/login')}
+            onClick={() => router.push(redirectTo ? `/auth/login?redirect=${encodeURIComponent(redirectTo)}` : '/auth/login')}
             className="primary-button px-6 py-3 text-sm"
           >
             Go to sign in
@@ -82,6 +135,7 @@ export default function RegisterPage() {
 
         <div className="glass-card w-full rounded-2xl p-7 md:p-10">
           <div className="mb-8">
+            <div className="mb-4"><Logo /></div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
               New account
             </div>

@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
+import { toast } from 'sonner';
 import type { WorkspaceDetail, InviteToken } from '@/types';
 
 export default function WorkspaceSettingsPage() {
@@ -267,7 +268,7 @@ export default function WorkspaceSettingsPage() {
                 )}
                 {isAdmin && m.userId !== currentUser?.id && (
                   <button
-                    onClick={() => { if (confirm(`Remove ${m.user.name}?`)) removeMember.mutate(m.userId); }}
+                    onClick={() => toast(`Remove ${m.user.name}?`, { action: { label: 'Remove', onClick: () => removeMember.mutate(m.userId) } })}
                     className="secondary-button min-h-0 px-3 py-1.5 text-xs text-destructive hover:bg-destructive/5"
                   >
                     Remove
