@@ -290,7 +290,7 @@ function ActivityRow({
 }: {
   item: {
     id: string;
-    kind: string;
+    type: string;
     title: string;
     meta: string;
     actor: { id: string; name: string; avatarUrl: string | null } | null;
@@ -298,7 +298,15 @@ function ActivityRow({
   };
 }) {
   const KindIcon =
-    item.kind === 'message' ? MessageSquare : item.kind === 'comment' ? Hash : ArrowUpRight;
+    item.type === 'MESSAGE_SENT'
+      ? MessageSquare
+      : item.type === 'FILE_UPLOADED'
+        ? FileText
+        : item.type === 'MEMBER_JOINED'
+          ? Users
+          : item.type === 'TASK_COMPLETED'
+            ? CheckCircle2
+            : ArrowUpRight;
 
   return (
     <div className="flex gap-3">

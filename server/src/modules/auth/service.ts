@@ -66,6 +66,10 @@ export async function login(input: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) throw new AppError(401, 'Invalid credentials');
 
+  if (!user.passwordHash) {
+    throw new AppError(403, 'This account uses portal access. Open your portal link or set a password first.');
+  }
+
   const valid = await bcrypt.compare(input.password, user.passwordHash);
   if (!valid) throw new AppError(401, 'Invalid credentials');
 

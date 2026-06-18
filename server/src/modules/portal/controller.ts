@@ -12,6 +12,24 @@ export async function requestMagicLink(req: Request, res: Response, next: NextFu
   } catch (err) { next(err); }
 }
 
+// POST /api/portal/invite/:inviteToken/accept  (public — zero-friction client onboarding)
+export async function acceptClientInvite(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await svc.acceptClientInvite(req.params.inviteToken));
+  } catch (err) { next(err); }
+}
+
+// POST /api/portal/set-password  (portal-authenticated)
+export async function setPortalPassword(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { password } = req.body;
+    if (!password || typeof password !== 'string') {
+      return res.status(400).json({ error: 'password is required' });
+    }
+    res.json(await svc.setPortalPassword(req.portalUser!.userId, password));
+  } catch (err) { next(err); }
+}
+
 // GET /api/portal/session/:sessionToken  (public)
 export async function validateSession(req: Request, res: Response, next: NextFunction) {
   try {

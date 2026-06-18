@@ -3,6 +3,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { storageConfig } from '../../config/storage';
 import { generateUploadSignature, buildCloudinaryUrl, deleteCloudinaryAsset } from '../../lib/cloudinary';
 import { io } from '../../server';
+import { logActivity } from '../../events/activity';
 import type { PresignUploadInput, ConfirmUploadInput } from './schema';
 
 /**
@@ -67,6 +68,14 @@ export async function confirmUpload(
       io.to(`user:${rid}`).emit('notification:new');
     }
   }
+
+  await logActivity({
+    projectId,
+    actorId: userId,
+    type: 'FILE_UPLOADED',
+    clientVisible: true, // files are visible to clients per PRD
+    meta: { fileId: file.id, fileName: file.name },
+  });
 
   return file;
 }

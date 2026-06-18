@@ -81,7 +81,6 @@ export default function AcceptInvitePage() {
   }
 
   if (status === 'success') {
-    const isClient = acceptData?.role === 'CLIENT';
     // Build redirect URL: project invite → /{workspaceSlug}/{projectId}, workspace invite → /{slug}
     const destination = acceptData?.workspaceSlug && acceptData?.projectId
       ? `/${acceptData.workspaceSlug}/${acceptData.projectId}`
@@ -95,15 +94,13 @@ export default function AcceptInvitePage() {
           <div className="mb-4 text-4xl">🎉</div>
           <h2 className="mb-3 text-2xl font-bold">Welcome aboard!</h2>
           <p className="mb-6 text-sm text-muted-foreground">
-            {isClient
-              ? 'You\u2019ve joined as a client. Your project team will share a portal link for easy access.'
-              : 'You\u2019ve successfully joined. Redirecting you now\u2026'}
+            {'You\u2019ve successfully joined. Redirecting you now\u2026'}
           </p>
           <button
             onClick={() => router.push(destination)}
             className="primary-button px-6 py-3 text-sm"
           >
-            {isClient ? 'Go to dashboard' : 'Go to project'}
+            Go to project
           </button>
         </div>
       </div>

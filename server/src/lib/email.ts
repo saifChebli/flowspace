@@ -178,6 +178,29 @@ export function inviteEmailTemplate(
   return baseLayout(`${inviterName} invited you to ${workspaceName}`, body);
 }
 
+export function clientInviteEmailTemplate(
+  inviterName: string,
+  projectName: string,
+  portalUrl: string,
+): string {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">You've been added to ${projectName}</h1>
+    <p style="margin:0;font-size:15px;line-height:24px;color:#3f3f46;">
+      <strong>${inviterName}</strong> has invited you to follow the <strong>${projectName}</strong> project on CollabSpace.
+    </p>
+    <p style="margin:8px 0 0;font-size:15px;line-height:24px;color:#3f3f46;">
+      Open your client portal to see progress, files, and updates — <strong>no account or password needed</strong>.
+    </p>
+    ${ctaButton('Open Your Portal', portalUrl)}
+    <p style="margin:0;font-size:13px;line-height:20px;color:#71717a;">
+      This link expires in <strong>7 days</strong>. If you don't recognise the sender, you can safely ignore this email.
+    </p>
+    <p style="margin:16px 0 0;font-size:12px;line-height:18px;color:#a1a1aa;word-break:break-all;">
+      Or copy and paste this URL: ${portalUrl}
+    </p>`;
+  return baseLayout(`${inviterName} invited you to ${projectName}`, body);
+}
+
 export function magicLinkEmailTemplate(projectName: string, magicUrl: string): string {
   const body = `
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Your Portal Access</h1>

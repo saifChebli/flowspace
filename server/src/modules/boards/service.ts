@@ -16,6 +16,7 @@ export async function getBoards(projectId: string, userId: string) {
         orderBy: { position: 'asc' },
         include: {
           tasks: {
+            where: { deletedAt: null },
             orderBy: { position: 'asc' },
             include: {
               assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } },

@@ -179,9 +179,17 @@ export interface DashboardData {
   role: 'MEMBER' | 'CLIENT';
 }
 
+export type ActivityType =
+  | 'TASK_CREATED'
+  | 'TASK_MOVED'
+  | 'TASK_COMPLETED'
+  | 'MESSAGE_SENT'
+  | 'FILE_UPLOADED'
+  | 'MEMBER_JOINED';
+
 export interface ActivityItem {
   id: string;
-  kind: 'message' | 'notification' | 'comment';
+  type: ActivityType;
   title: string;
   meta: string;
   actor: Pick<User, 'id' | 'name' | 'avatarUrl'> | null;

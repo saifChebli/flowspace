@@ -2,8 +2,9 @@ import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput, UpdateProjectMemberRoleInput } from './schema';
-import { sendEmail, inviteEmailTemplate } from '../../lib/email';
+import { sendEmail, inviteEmailTemplate, clientInviteEmailTemplate } from '../../lib/email';
 import { env } from '../../config/env';
+import { logActivity } from '../../events/activity';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -207,12 +208,23 @@ export async function inviteProjectMember(projectId: string, inviterId: string, 
     },
   });
 
-  const inviteUrl = `${env.CLIENT_URL}/invite/${invite.token}`;
-  await sendEmail({
-    to: input.email,
-    subject: `You're invited to ${project.name} on CollabSpace`,
-    html: inviteEmailTemplate(inviter!.name, project.workspace.name, inviteUrl),
-  });
+  if (input.role === 'CLIENT') {
+    // Clients get a zero-friction portal link — clicking it provisions access and
+    // drops them straight on their dashboard (no signup/login screen).
+    const portalUrl = `${env.CLIENT_URL}/portal/invite/${invite.token}`;
+    await sendEmail({
+      to: input.email,
+      subject: `You've been added to ${project.name} on CollabSpace`,
+      html: clientInviteEmailTemplate(inviter!.name, project.name, portalUrl),
+    });
+  } else {
+    const inviteUrl = `${env.CLIENT_URL}/invite/${invite.token}`;
+    await sendEmail({
+      to: input.email,
+      subject: `You're invited to ${project.name} on CollabSpace`,
+      html: inviteEmailTemplate(inviter!.name, project.workspace.name, inviteUrl),
+    });
+  }
 
   return { message: 'Invite sent' };
 }
@@ -220,7 +232,7 @@ export async function inviteProjectMember(projectId: string, inviterId: string, 
 export async function acceptProjectInvite(token: string, userId: string) {
   const [invite, actor] = await Promise.all([
     prisma.inviteToken.findUnique({ where: { token } }),
-    prisma.user.findUnique({ where: { id: userId }, select: { email: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { email: true, name: true } }),
   ]);
 
   if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
@@ -278,6 +290,14 @@ export async function acceptProjectInvite(token: string, userId: string) {
     });
     io.to(`user:${invite.createdById}`).emit('notification:new');
   }
+
+  await logActivity({
+    projectId: invite.projectId,
+    actorId: userId,
+    type: 'MEMBER_JOINED',
+    clientVisible: true,
+    meta: { memberName: actor?.name, role },
+  });
 
   return { projectId: invite.projectId, role, workspaceSlug: project?.workspace.slug };
 }

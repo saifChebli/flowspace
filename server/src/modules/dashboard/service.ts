@@ -39,6 +39,7 @@ export async function getProjectDashboard(projectId: string, userId: string) {
       by: ['completedAt'],
       where: {
         list: { board: { projectId } },
+        deletedAt: null,
       },
       _count: { id: true },
     }),
@@ -49,6 +50,7 @@ export async function getProjectDashboard(projectId: string, userId: string) {
       where: {
         list: { board: { projectId } },
         completedAt: null,
+        deletedAt: null,
       },
       _count: { id: true },
     }),
@@ -91,9 +93,9 @@ export async function getProjectDashboard(projectId: string, userId: string) {
         name: true,
         position: true,
         board: { select: { id: true, name: true } },
-        _count: { select: { tasks: true } },
+        _count: { select: { tasks: { where: { deletedAt: null } } } },
         tasks: {
-          where: { completedAt: null },
+          where: { completedAt: null, deletedAt: null },
           select: { id: true },
         },
       },
@@ -120,6 +122,7 @@ export async function getProjectDashboard(projectId: string, userId: string) {
     where: {
       list: { board: { projectId } },
       completedAt: null,
+      deletedAt: null,
       dueDate: { lt: new Date() },
     },
   });
@@ -173,119 +176,53 @@ export async function getProjectActivity(
   const member = await assertProjectMember(projectId, userId);
   const isClient = member.role === 'CLIENT';
 
-  // Gather recent messages as activity items
-  const messages = await prisma.message.findMany({
+  const rows = await prisma.activityLog.findMany({
     where: {
-      channel: {
-        projectId,
-        ...(isClient ? { type: 'CLIENT_VISIBLE' } : {}),
-      },
-      deletedAt: null,
-      parentId: null,
+      projectId,
+      ...(isClient ? { clientVisible: true } : {}),
       ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
     },
     orderBy: { createdAt: 'desc' },
-    take: Math.ceil(limit / 2),
-    select: {
-      id: true,
-      body: true,
-      createdAt: true,
-      author: { select: { id: true, name: true, avatarUrl: true } },
-      channel: { select: { id: true, name: true, type: true } },
-    },
+    take: limit,
   });
 
-  // Gather recent task events (creation / completion) via notifications
-  const taskNotifications = await prisma.notification.findMany({
-    where: {
-      task: { list: { board: { projectId } } },
-      type: { in: ['TASK_ASSIGNED', 'FILE_UPLOADED'] },
-      ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    take: Math.ceil(limit / 2),
-    select: {
-      id: true,
-      type: true,
-      meta: true,
-      createdAt: true,
-      actor: { select: { id: true, name: true, avatarUrl: true } },
-      task: { select: { id: true, title: true } },
-    },
+  const items = rows.map((r) => {
+    const meta = (r.meta ?? {}) as Record<string, any>;
+    const actor = (meta.actor ?? null) as { id: string; name: string; avatarUrl: string | null } | null;
+    return {
+      id: r.id,
+      type: r.type, // TASK_CREATED | TASK_MOVED | TASK_COMPLETED | MESSAGE_SENT | FILE_UPLOADED | MEMBER_JOINED
+      ...buildActivityCopy(r.type, meta),
+      actor,
+      createdAt: r.createdAt,
+    };
   });
 
-  // Also gather recent task comments
-  const taskComments = await prisma.taskComment.findMany({
-    where: {
-      task: { list: { board: { projectId } } },
-      ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
-    },
-    orderBy: { createdAt: 'desc' },
-    take: Math.ceil(limit / 3),
-    select: {
-      id: true,
-      body: true,
-      createdAt: true,
-      author: { select: { id: true, name: true, avatarUrl: true } },
-      task: { select: { id: true, title: true } },
-    },
-  });
+  const nextCursor = items.length === limit ? items[items.length - 1].createdAt.toISOString() : null;
 
-  // Merge and sort by createdAt desc
-  type ActivityItem = {
-    id: string;
-    kind: 'message' | 'notification' | 'comment';
-    title: string;
-    meta: string;
-    actor: { id: string; name: string; avatarUrl: string | null } | null;
-    createdAt: Date;
-  };
+  return { items, nextCursor };
+}
 
-  const items: ActivityItem[] = [];
-
-  for (const m of messages) {
-    items.push({
-      id: `msg-${m.id}`,
-      kind: 'message',
-      title: m.body.length > 80 ? m.body.slice(0, 80) + '…' : m.body,
-      meta: `#${m.channel.name}`,
-      actor: m.author,
-      createdAt: m.createdAt,
-    });
+/** Map an activity row to a human-readable { title, meta } for the feed UI. */
+function buildActivityCopy(type: string, meta: Record<string, any>): { title: string; meta: string } {
+  switch (type) {
+    case 'TASK_CREATED':
+      return { title: `Created “${meta.taskTitle ?? 'a task'}”`, meta: 'Task' };
+    case 'TASK_MOVED':
+      return { title: `Moved “${meta.taskTitle ?? 'a task'}”`, meta: meta.listName ? `to ${meta.listName}` : 'Task' };
+    case 'TASK_COMPLETED':
+      return { title: `Completed “${meta.taskTitle ?? 'a task'}”`, meta: 'Done' };
+    case 'MESSAGE_SENT': {
+      const preview = String(meta.preview ?? '');
+      return { title: preview.length > 80 ? preview.slice(0, 80) + '…' : preview, meta: meta.channelName ? `#${meta.channelName}` : 'Message' };
+    }
+    case 'FILE_UPLOADED':
+      return { title: `Uploaded ${meta.fileName ?? 'a file'}`, meta: 'File' };
+    case 'MEMBER_JOINED':
+      return { title: `${meta.memberName ?? 'A member'} joined`, meta: 'Member' };
+    default:
+      return { title: type, meta: '' };
   }
-
-  for (const n of taskNotifications) {
-    const label =
-      n.type === 'TASK_ASSIGNED'
-        ? `Assigned to "${n.task?.title ?? 'task'}"`
-        : `File uploaded`;
-    items.push({
-      id: `notif-${n.id}`,
-      kind: 'notification',
-      title: label,
-      meta: n.task?.title ?? '',
-      actor: n.actor,
-      createdAt: n.createdAt,
-    });
-  }
-
-  for (const c of taskComments) {
-    items.push({
-      id: `comment-${c.id}`,
-      kind: 'comment',
-      title: c.body.length > 80 ? c.body.slice(0, 80) + '…' : c.body,
-      meta: `on "${c.task.title}"`,
-      actor: c.author,
-      createdAt: c.createdAt,
-    });
-  }
-
-  items.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
-  const sliced = items.slice(0, limit);
-
-  const nextCursor = sliced.length === limit ? sliced[sliced.length - 1].createdAt.toISOString() : null;
-
-  return { items: sliced, nextCursor };
 }
 
 // ── Client portal view ──────────────────────────────────────────────────────

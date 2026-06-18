@@ -35,6 +35,13 @@ enum TaskPriority {
   URGENT
 }
 
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  REVIEW
+  DONE
+}
+
 enum NotificationType {
   TASK_ASSIGNED
   TASK_MENTIONED
@@ -55,29 +62,29 @@ model User {
   email                  String    @unique
   name                   String
   avatarUrl              String?
-  passwordHash           String
+  passwordHash           String? // null = portal-only (passwordless) account
   emailVerified          Boolean   @default(false)
-  emailVerifyToken       String?   // stores SHA-256 hash of raw token
+  emailVerifyToken       String? // stores SHA-256 hash of raw token
   emailVerifyTokenExpiry DateTime?
-  resetToken             String?   // stores SHA-256 hash of raw token
+  resetToken             String? // stores SHA-256 hash of raw token
   resetTokenExpiry       DateTime?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
-  workspaceMembers  WorkspaceMember[]
-  projectMembers    ProjectMember[]
-  sentMessages      Message[]
-  taskAssignees     TaskAssignee[]
-  taskComments      TaskComment[]
-  taskTimeEntries   TaskTimeEntry[]
-  uploadedFiles     File[]
-  notifications     Notification[]     @relation("NotificationRecipient")
+  workspaceMembers   WorkspaceMember[]
+  projectMembers     ProjectMember[]
+  sentMessages       Message[]
+  taskAssignees      TaskAssignee[]
+  taskComments       TaskComment[]
+  taskTimeEntries    TaskTimeEntry[]
+  uploadedFiles      File[]
+  notifications      Notification[]    @relation("NotificationRecipient")
   actorNotifications Notification[]    @relation("NotificationActor")
-  inviteTokens      InviteToken[]
-  refreshTokens     RefreshToken[]
-  channelReads      ChannelRead[]
-  channelMembers    ChannelMember[]
-  portalSessions    PortalSession[]
+  inviteTokens       InviteToken[]
+  refreshTokens      RefreshToken[]
+  channelReads       ChannelRead[]
+  channelMembers     ChannelMember[]
+  portalSessions     PortalSession[]
 
   @@map("users")
 }
@@ -102,11 +109,12 @@ model Workspace {
   slug        String   @unique
   description String?
   logoUrl     String?
+  ownerId     String? // workspace owner (creator); nullable for legacy rows
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  members     WorkspaceMember[]
-  projects    Project[]
+  members      WorkspaceMember[]
+  projects     Project[]
   inviteTokens InviteToken[]
 
   @@map("workspaces")
@@ -138,13 +146,14 @@ model Project {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  workspace       Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  members         ProjectMember[]
-  channels        Channel[]
-  boards          Board[]
-  files           File[]
-  inviteTokens    InviteToken[]
-  portalSessions  PortalSession[]
+  workspace      Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  members        ProjectMember[]
+  channels       Channel[]
+  boards         Board[]
+  files          File[]
+  inviteTokens   InviteToken[]
+  portalSessions PortalSession[]
+  activities     ActivityLog[]
 
   @@map("projects")
 }
@@ -175,7 +184,7 @@ model Channel {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 
-  project  Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project  Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   messages Message[]
   reads    ChannelRead[]
   members  ChannelMember[]
@@ -211,22 +220,24 @@ model ChannelRead {
 }
 
 model Message {
-  id          String   @id @default(cuid())
-  channelId   String
-  authorId    String
-  body        String
-  parentId    String?
-  editedAt    DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime @default(now())
+  id        String    @id @default(cuid())
+  channelId String
+  authorId  String
+  body      String
+  parentId  String?
+  editedAt  DateTime?
+  deletedAt DateTime?
+  createdAt DateTime  @default(now())
 
-  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  author      User              @relation(fields: [authorId], references: [id])
-  parent      Message?          @relation("MessageThread", fields: [parentId], references: [id])
-  replies     Message[]         @relation("MessageThread")
+  channel     Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  author      User                @relation(fields: [authorId], references: [id])
+  parent      Message?            @relation("MessageThread", fields: [parentId], references: [id])
+  replies     Message[]           @relation("MessageThread")
   attachments MessageAttachment[]
   mentions    MessageMention[]
 
+  @@index([channelId, createdAt])
+  @@index([parentId])
   @@map("messages")
 }
 
@@ -261,7 +272,7 @@ model Board {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  project Project    @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  project Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
   lists   BoardList[]
 
   @@map("boards")
@@ -287,11 +298,13 @@ model Task {
   title            String
   description      String?
   priority         TaskPriority @default(MEDIUM)
+  status           TaskStatus   @default(TODO)
   position         Int
   dueDate          DateTime?
   labels           String[]
   estimatedMinutes Int?
   completedAt      DateTime?
+  deletedAt        DateTime?
   createdAt        DateTime     @default(now())
   updatedAt        DateTime     @updatedAt
 
@@ -301,6 +314,8 @@ model Task {
   timeEntries   TaskTimeEntry[]
   notifications Notification[]
 
+  @@index([listId])
+  @@index([createdAt])
   @@map("tasks")
 }
 
@@ -328,6 +343,7 @@ model TaskComment {
   task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
   author User @relation(fields: [authorId], references: [id])
 
+  @@index([taskId])
   @@map("task_comments")
 }
 
@@ -349,28 +365,29 @@ model TaskTimeEntry {
 // ─── Files ────────────────────────────────────────────────────────────────────
 
 model File {
-  id          String      @id @default(cuid())
-  projectId   String
+  id           String      @id @default(cuid())
+  projectId    String
   uploadedById String
-  name        String
-  mimeType    String
-  sizeBytes   Int
-  storage     FileStorage @default(S3)
-  storageKey  String      // S3 key or Cloudinary public_id
-  url         String
-  createdAt   DateTime    @default(now())
+  name         String
+  mimeType     String
+  sizeBytes    Int
+  storage      FileStorage @default(S3)
+  storageKey   String // S3 key or Cloudinary public_id
+  url          String
+  createdAt    DateTime    @default(now())
 
-  project      Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  uploadedBy   User                @relation(fields: [uploadedById], references: [id])
-  attachments  MessageAttachment[]
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy  User                @relation(fields: [uploadedById], references: [id])
+  attachments MessageAttachment[]
 
+  @@index([projectId, createdAt])
   @@map("files")
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 model Notification {
-  id         String           @id @default(cuid())
+  id          String           @id @default(cuid())
   recipientId String
   actorId     String?
   type        NotificationType
@@ -383,6 +400,7 @@ model Notification {
   actor     User? @relation("NotificationActor", fields: [actorId], references: [id])
   task      Task? @relation(fields: [taskId], references: [id], onDelete: SetNull)
 
+  @@index([recipientId, createdAt])
   @@map("notifications")
 }
 
@@ -404,6 +422,7 @@ model InviteToken {
   project   Project?   @relation(fields: [projectId], references: [id], onDelete: Cascade)
   createdBy User       @relation(fields: [createdById], references: [id])
 
+  @@index([email, projectId])
   @@map("invite_tokens")
 }
 
@@ -424,4 +443,21 @@ model PortalSession {
 
   @@unique([email, projectId])
   @@map("portal_sessions")
+}
+
+// ─── Activity Log ─────────────────────────────────────────────────────────────
+
+model ActivityLog {
+  id            String   @id @default(cuid())
+  projectId     String
+  actorId       String? // null = system
+  type          String // TASK_CREATED | TASK_MOVED | TASK_COMPLETED | MESSAGE_SENT | FILE_UPLOADED | MEMBER_JOINED
+  meta          Json?
+  clientVisible Boolean  @default(false)
+  createdAt     DateTime @default(now())
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId, createdAt])
+  @@map("activity_logs")
 }

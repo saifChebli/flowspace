@@ -1,8 +1,21 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
+import { logActivity } from '../../events/activity';
 import type { CreateTaskInput, UpdateTaskInput, MoveTaskInput } from '../boards/schema';
 import type { TimeEntryInput } from './schema';
+
+import type { TaskStatus } from '@prisma/client';
+
+/** Derive a TaskStatus from a destination list's name (best-effort). */
+function statusFromListName(name: string): TaskStatus | null {
+  const n = name.toLowerCase();
+  if (/\b(done|complete|completed|shipped)\b/.test(n)) return 'DONE';
+  if (/\breview\b/.test(n)) return 'REVIEW';
+  if (/\b(in[\s-]?progress|doing|wip)\b/.test(n)) return 'IN_PROGRESS';
+  if (/\b(to[\s-]?do|todo|backlog|new)\b/.test(n)) return 'TODO';
+  return null;
+}
 
 export async function createTask(listId: string, userId: string, input: CreateTaskInput) {
   const list = await prisma.boardList.findUnique({ where: { id: listId }, include: { board: true } });
@@ -42,6 +55,13 @@ export async function createTask(listId: string, userId: string, input: CreateTa
     }
   }
 
+  await logActivity({
+    projectId: list.board.projectId,
+    actorId: userId,
+    type: 'TASK_CREATED',
+    meta: { taskId: task.id, taskTitle: task.title },
+  });
+
   return task;
 }
 
@@ -55,7 +75,7 @@ export async function getTask(taskId: string, userId: string) {
       timeEntries: { include: { user: { select: { id: true, name: true, avatarUrl: true } } }, orderBy: { date: 'desc' } },
     },
   });
-  if (!task) throw new AppError(404, 'Task not found');
+  if (!task || task.deletedAt) throw new AppError(404, 'Task not found');
   await assertProjectMember(task.list.board.projectId, userId);
   return task;
 }
@@ -109,12 +129,38 @@ export async function updateTask(taskId: string, userId: string, input: UpdateTa
 export async function moveTask(taskId: string, userId: string, input: MoveTaskInput) {
   const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
   if (!task) throw new AppError(404, 'Task not found');
-  await assertTeamMember(task.list.board.projectId, userId);
+  const projectId = task.list.board.projectId;
+  await assertTeamMember(projectId, userId);
 
-  return prisma.task.update({
-    where: { id: taskId },
-    data: { listId: input.listId, position: input.position },
+  // Resolve the destination list to auto-update status when appropriate.
+  const targetList = await prisma.boardList.findUnique({ where: { id: input.listId } });
+  if (!targetList) throw new AppError(404, 'Target list not found');
+
+  const derivedStatus = statusFromListName(targetList.name);
+  const data: { listId: string; position: number; status?: TaskStatus; completedAt?: Date | null } = {
+    listId: input.listId,
+    position: input.position,
+  };
+  if (derivedStatus) {
+    data.status = derivedStatus;
+    if (derivedStatus === 'DONE') {
+      data.completedAt = task.completedAt ?? new Date();
+    } else if (task.completedAt) {
+      data.completedAt = null; // moved out of Done
+    }
+  }
+
+  const updated = await prisma.task.update({ where: { id: taskId }, data });
+
+  await logActivity({
+    projectId,
+    actorId: userId,
+    type: derivedStatus === 'DONE' ? 'TASK_COMPLETED' : 'TASK_MOVED',
+    clientVisible: derivedStatus === 'DONE',
+    meta: { taskId, taskTitle: task.title, listName: targetList.name },
   });
+
+  return updated;
 }
 
 export async function deleteTask(taskId: string, userId: string) {
@@ -122,7 +168,8 @@ export async function deleteTask(taskId: string, userId: string) {
   if (!task) throw new AppError(404, 'Task not found');
   await assertTeamMember(task.list.board.projectId, userId);
 
-  await prisma.task.delete({ where: { id: taskId } });
+  // Soft delete — never hard delete (PRD).
+  await prisma.task.update({ where: { id: taskId }, data: { deletedAt: new Date() } });
   return { message: 'Task deleted' };
 }
 

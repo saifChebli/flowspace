@@ -40,6 +40,7 @@ export async function createWorkspace(userId: string, input: CreateWorkspaceInpu
       name: input.name,
       slug,
       description: input.description,
+      ownerId: userId,
       members: { create: { userId, role: 'ADMIN' } },
     },
     include: { members: { include: { user: { select: { id: true, name: true, email: true } } } } },

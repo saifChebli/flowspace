@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -13,6 +13,8 @@ import {
   Download,
   Clock,
   LogOut,
+  KeyRound,
+  X,
 } from 'lucide-react';
 import type { ClientPortalData, User } from '@/types';
 
@@ -68,6 +70,9 @@ export default function PortalProjectPage() {
           </div>
         ) : data ? (
           <div className="space-y-8">
+            {/* Optional password upgrade */}
+            <SetPasswordCard email={session?.email} />
+
             {/* Stats row */}
             <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
               <StatCard icon={ClipboardList} label="Tasks" value={data.totalTasks} />
@@ -181,6 +186,83 @@ export default function PortalProjectPage() {
             )}
           </div>
         ) : null}
+      </div>
+    </div>
+  );
+}
+
+function SetPasswordCard({ email }: { email?: string }) {
+  const [dismissed, setDismissed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState('');
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  if (dismissed || done) {
+    return done ? (
+      <div className="glass-card rounded-xl border-teal-500/30 p-4 text-sm text-muted-foreground">
+        Password set — you can now sign in with <strong>{email}</strong> from the login page anytime.
+      </div>
+    ) : null;
+  }
+
+  const submit = async () => {
+    setError('');
+    setSubmitting(true);
+    try {
+      await portalApi.post('/portal/set-password', { password });
+      setDone(true);
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Could not set password.';
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="glass-card rounded-xl p-4">
+      <div className="flex items-start gap-3">
+        <KeyRound className="mt-0.5 h-5 w-5 shrink-0 text-gold" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Set a password to log in anytime</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Optional — you can always re-open this portal with a magic link sent to your email.
+          </p>
+          {open && (
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="New password (min 8 characters)"
+                className="flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              />
+              <button
+                onClick={submit}
+                disabled={submitting || password.length < 8}
+                className="primary-button px-4 py-2 text-sm disabled:opacity-50"
+              >
+                {submitting ? 'Saving…' : 'Save password'}
+              </button>
+            </div>
+          )}
+          {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+        </div>
+        {open ? null : (
+          <button onClick={() => setOpen(true)} className="secondary-button shrink-0 px-3 py-1.5 text-xs">
+            Set password
+          </button>
+        )}
+        <button
+          onClick={() => setDismissed(true)}
+          aria-label="Dismiss"
+          className="shrink-0 text-muted-foreground transition hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
       </div>
     </div>
   );

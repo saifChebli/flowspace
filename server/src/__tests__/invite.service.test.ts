@@ -4,6 +4,10 @@ const mockInviteToken = { findUnique: jest.fn(), update: jest.fn() };
 const mockUser = { findUnique: jest.fn() };
 const mockWorkspaceMember = { findUnique: jest.fn(), create: jest.fn() };
 const mockProjectMember = { findUnique: jest.fn(), create: jest.fn() };
+const mockProject = { findUnique: jest.fn() };
+const mockWorkspace = { findUnique: jest.fn() };
+const mockNotification = { create: jest.fn() };
+const mockActivityLog = { create: jest.fn() };
 const mockTransaction = jest.fn();
 
 jest.mock('../lib/prisma', () => ({
@@ -12,9 +16,15 @@ jest.mock('../lib/prisma', () => ({
     user: mockUser,
     workspaceMember: mockWorkspaceMember,
     projectMember: mockProjectMember,
+    project: mockProject,
+    workspace: mockWorkspace,
+    notification: mockNotification,
+    activityLog: mockActivityLog,
     $transaction: mockTransaction,
   },
 }));
+
+jest.mock('../server', () => ({ io: { to: () => ({ emit: jest.fn() }) } }));
 
 jest.mock('../lib/email', () => ({
   sendEmail: jest.fn().mockResolvedValue(undefined),

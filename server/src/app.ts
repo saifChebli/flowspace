@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import { corsOptions } from './config/cors';
+import { env } from './config/env';
 import { globalRateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
 
@@ -22,9 +24,30 @@ import portalRouter from './modules/portal/router';
 export function createApp() {
   const app = express();
 
+  // Behind Railway/Vercel TLS proxies — required for Secure cookies and
+  // correct client IPs in express-rate-limit.
+  app.set('trust proxy', 1);
+
   // ─── Security & parsing ──────────────────────────────────────────────────
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          connectSrc: ["'self'", env.CLIENT_URL],
+          imgSrc: ["'self'", 'data:', 'https://res.cloudinary.com'],
+          scriptSrc: ["'self'"],
+          objectSrc: ["'none'"],
+          frameAncestors: ["'none'"],
+          baseUri: ["'self'"],
+        },
+      },
+      // API is consumed cross-origin by the Next.js client.
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
   app.use(cors(corsOptions));
+  app.use(cookieParser());
   app.use(express.json({ limit: '1mb' }));
   app.use(express.urlencoded({ extended: true, limit: '1mb' }));
   app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));

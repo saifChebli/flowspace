@@ -1,8 +1,11 @@
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../../lib/prisma';
 import { sendEmail, magicLinkEmailTemplate } from '../../lib/email';
 import { AppError } from '../../middleware/errorHandler';
 import { env } from '../../config/env';
+import { io } from '../../server';
+import { logActivity } from '../../events/activity';
 
 const PORTAL_SESSION_DAYS = 90;
 
@@ -62,6 +65,127 @@ export async function revokePortalToken(projectId: string, actorId: string) {
   ]);
 
   return { message: 'Portal token revoked and all sessions invalidated' };
+}
+
+// ── Client invite acceptance (zero-friction first access) ───────────────────
+
+/**
+ * Accept a CLIENT project invite via the emailed link. Provisions a passwordless
+ * user if needed, joins them as CLIENT, ensures a portal token exists, and returns
+ * a portal session so the client lands directly on their dashboard — no signup.
+ */
+export async function acceptClientInvite(inviteToken: string) {
+  const invite = await prisma.inviteToken.findUnique({ where: { token: inviteToken } });
+
+  if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
+    throw new AppError(400, 'This invite link is invalid or has expired.');
+  }
+  if (!invite.projectId || invite.role !== 'CLIENT') {
+    throw new AppError(400, 'This is not a client invite.');
+  }
+
+  const project = await prisma.project.findUnique({
+    where: { id: invite.projectId },
+    select: { id: true, name: true, workspaceId: true, clientPortalToken: true },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+
+  const normalizedEmail = invite.email.toLowerCase().trim();
+
+  // Find or auto-provision a passwordless user for this client.
+  let user = await prisma.user.findUnique({
+    where: { email: normalizedEmail },
+    select: { id: true },
+  });
+  if (!user) {
+    const nameFromEmail = normalizedEmail.split('@')[0] || 'Client';
+    user = await prisma.user.create({
+      data: {
+        email: normalizedEmail,
+        name: nameFromEmail,
+        passwordHash: null,
+        emailVerified: true, // clicking the emailed invite proves email ownership
+      },
+      select: { id: true },
+    });
+  }
+  const userId = user.id;
+
+  // Ensure a portal token exists so the re-access landing page works later.
+  const portalToken = project.clientPortalToken ?? crypto.randomBytes(24).toString('base64url');
+
+  const sessionTokenValue = crypto.randomBytes(24).toString('base64url');
+
+  const txOps: any[] = [
+    prisma.projectMember.upsert({
+      where: { projectId_userId: { projectId: project.id, userId } },
+      update: { role: 'CLIENT' },
+      create: { projectId: project.id, userId, role: 'CLIENT' },
+    }),
+    prisma.inviteToken.update({ where: { id: invite.id }, data: { acceptedAt: new Date() } }),
+    prisma.portalSession.upsert({
+      where: { email_projectId: { email: normalizedEmail, projectId: project.id } },
+      update: { token: sessionTokenValue, userId, expiresAt: portalSessionExpiry(), lastActiveAt: new Date() },
+      create: { email: normalizedEmail, projectId: project.id, userId, token: sessionTokenValue, expiresAt: portalSessionExpiry() },
+    }),
+  ];
+
+  if (!project.clientPortalToken) {
+    txOps.push(
+      prisma.project.update({ where: { id: project.id }, data: { clientPortalToken: portalToken } }),
+    );
+  }
+
+  // Ensure workspace membership exists (clients need it to resolve the workspace layout).
+  const existingWsMember = await prisma.workspaceMember.findUnique({
+    where: { workspaceId_userId: { workspaceId: project.workspaceId, userId } },
+  });
+  if (!existingWsMember) {
+    txOps.push(
+      prisma.workspaceMember.create({
+        data: { workspaceId: project.workspaceId, userId, role: 'MEMBER' },
+      }),
+    );
+  }
+
+  await prisma.$transaction(txOps);
+
+  // Notify the inviter that their invite was accepted.
+  if (invite.createdById) {
+    await prisma.notification.create({
+      data: {
+        recipientId: invite.createdById,
+        actorId: userId,
+        type: 'INVITE_ACCEPTED',
+        meta: { projectId: project.id },
+      },
+    });
+    io.to(`user:${invite.createdById}`).emit('notification:new');
+  }
+
+  await logActivity({
+    projectId: project.id,
+    actorId: userId,
+    type: 'MEMBER_JOINED',
+    clientVisible: true,
+    meta: { memberName: normalizedEmail.split('@')[0], role: 'CLIENT' },
+  });
+
+  return { sessionToken: sessionTokenValue, projectId: project.id };
+}
+
+// ── Optional password upgrade for portal users ──────────────────────────────
+
+export async function setPortalPassword(userId: string, password: string) {
+  if (!password || password.length < 8) {
+    throw new AppError(400, 'Password must be at least 8 characters.');
+  }
+  const passwordHash = await bcrypt.hash(password, 12);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash, emailVerified: true },
+  });
+  return { message: 'Password set. You can now log in with your email and password.' };
 }
 
 // ── Magic link request ─────────────────────────────────────────────────────

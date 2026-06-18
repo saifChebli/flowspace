@@ -1,6 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
+import { logActivity } from '../../events/activity';
 import type { SendMessageInput, EditMessageInput } from './schema';
 
 export async function sendMessage(channelId: string, authorId: string, input: SendMessageInput) {
@@ -59,6 +60,17 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
     for (const uid of mentionRecipients) {
       io.to(`user:${uid}`).emit('notification:new');
     }
+  }
+
+  // Log top-level messages to the project activity feed.
+  if (!message.parentId) {
+    await logActivity({
+      projectId: channel.projectId,
+      actorId: authorId,
+      type: 'MESSAGE_SENT',
+      clientVisible: channel.type === 'CLIENT_VISIBLE',
+      meta: { channelName: channel.name, preview: input.body },
+    });
   }
 
   return message;
