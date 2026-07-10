@@ -204,7 +204,7 @@ export async function getProjectActivity(
 }
 
 /** Map an activity row to a human-readable { title, meta } for the feed UI. */
-function buildActivityCopy(type: string, meta: Record<string, any>): { title: string; meta: string } {
+export function buildActivityCopy(type: string, meta: Record<string, any>): { title: string; meta: string } {
   switch (type) {
     case 'TASK_CREATED':
       return { title: `Created “${meta.taskTitle ?? 'a task'}”`, meta: 'Task' };

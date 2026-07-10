@@ -20,6 +20,7 @@ import filesRouter from './modules/files/router';
 import notificationsRouter from './modules/notifications/router';
 import dashboardRouter from './modules/dashboard/router';
 import portalRouter from './modules/portal/router';
+import searchRouter from './modules/search/router';
 
 export function createApp() {
   const app = express();
@@ -69,6 +70,7 @@ export function createApp() {
   app.use('/api/tasks', tasksRouter);
   app.use('/api/projects/:projectId/files', filesRouter);
   app.use('/api/projects/:projectId/dashboard', dashboardRouter);
+  app.use('/api/projects/:projectId/search', searchRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/portal', portalRouter);
 

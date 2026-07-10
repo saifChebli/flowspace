@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import api from '@/lib/api';
+import { renderMarkdown } from '@/lib/markdown';
 import { toast } from 'sonner';
 import type { Task, TaskComment, TaskTimeEntry, Project } from '@/types';
 
@@ -314,9 +315,14 @@ export default function TaskDetailModal({ taskId, projectId, onClose }: Props) {
                     />
                   ) : (
                     <div className="soft-row rounded-lg px-4 py-3">
-                      <p className="text-sm leading-6 text-muted-foreground">
-                        {task.description ?? <span className="italic">No description</span>}
-                      </p>
+                      {task.description ? (
+                        <div
+                          className="text-sm leading-6 text-muted-foreground [&_a]:text-accent [&_a]:underline [&_code]:rounded [&_code]:bg-muted [&_code]:px-1 [&_ol]:list-decimal [&_ol]:pl-5 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-5"
+                          dangerouslySetInnerHTML={{ __html: renderMarkdown(task.description) }}
+                        />
+                      ) : (
+                        <p className="text-sm italic leading-6 text-muted-foreground">No description</p>
+                      )}
                     </div>
                   )}
                 </div>

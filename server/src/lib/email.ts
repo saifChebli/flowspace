@@ -203,6 +203,37 @@ export function clientInviteEmailTemplate(
   return baseLayout(`${inviterName} invited you to ${projectName}`, body);
 }
 
+export function digestEmailTemplate(name: string, count: number, appUrl: string): string {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Your CollabSpace summary</h1>
+    <p style="margin:0 0 4px;font-size:15px;line-height:24px;color:#3f3f46;">Hi ${name},</p>
+    <p style="margin:0;font-size:15px;line-height:24px;color:#3f3f46;">
+      You have <strong>${count}</strong> unread notification${count === 1 ? '' : 's'} waiting for you.
+    </p>
+    ${ctaButton('Open CollabSpace', appUrl)}
+    <p style="margin:0;font-size:13px;line-height:20px;color:#71717a;">
+      You're receiving this daily summary because you have unread activity.
+    </p>`;
+  return baseLayout(`You have ${count} unread notification${count === 1 ? '' : 's'}`, body);
+}
+
+export function dueReminderEmailTemplate(
+  name: string,
+  taskTitle: string,
+  projectName: string,
+  dueLabel: string,
+  appUrl: string,
+): string {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Task due soon</h1>
+    <p style="margin:0 0 4px;font-size:15px;line-height:24px;color:#3f3f46;">Hi ${name},</p>
+    <p style="margin:0;font-size:15px;line-height:24px;color:#3f3f46;">
+      <strong>${taskTitle}</strong> in <strong>${projectName}</strong> is due <strong>${dueLabel}</strong>.
+    </p>
+    ${ctaButton('View Task', appUrl)}`;
+  return baseLayout(`Task due soon: ${taskTitle}`, body);
+}
+
 export function magicLinkEmailTemplate(projectName: string, magicUrl: string): string {
   const body = `
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Your Portal Access</h1>

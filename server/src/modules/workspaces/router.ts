@@ -14,6 +14,7 @@ router.delete('/:slug', ctrl.remove);
 
 router.post('/:slug/invite', ctrl.invite);
 router.get('/:slug/invites', ctrl.listInvites);
+router.get('/:slug/activity', ctrl.getActivity);
 router.delete('/:slug/members/:memberId', ctrl.removeMember);
 router.patch('/:slug/members/:memberId', ctrl.updateMemberRole);
 

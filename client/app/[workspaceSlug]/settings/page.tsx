@@ -8,6 +8,15 @@ import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import type { WorkspaceDetail, InviteToken } from '@/types';
 
+type AuditItem = {
+  id: string;
+  title: string;
+  meta: string;
+  actor: { id: string; name: string } | null;
+  project: { id: string; name: string };
+  createdAt: string;
+};
+
 export default function WorkspaceSettingsPage() {
   const { workspaceSlug } = useParams<{ workspaceSlug: string }>();
   const router = useRouter();
@@ -27,6 +36,12 @@ export default function WorkspaceSettingsPage() {
   const { data: pendingInvites } = useQuery<InviteToken[]>({
     queryKey: ['workspace-invites', workspaceSlug],
     queryFn: () => api.get(`/workspaces/${workspaceSlug}/invites`).then((r) => r.data),
+    enabled: isAdmin,
+  });
+
+  const { data: activity } = useQuery<{ items: AuditItem[] }>({
+    queryKey: ['workspace-activity', workspaceSlug],
+    queryFn: () => api.get(`/workspaces/${workspaceSlug}/activity`).then((r) => r.data),
     enabled: isAdmin,
   });
 
@@ -279,6 +294,26 @@ export default function WorkspaceSettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* Activity log (admin audit view) */}
+      {isAdmin && activity && activity.items.length > 0 && (
+        <div className="glass-card rounded-xl p-5">
+          <h3 className="section-kicker mb-4">Activity log</h3>
+          <div className="space-y-2">
+            {activity.items.map((a) => (
+              <div key={a.id} className="soft-row flex items-center justify-between rounded-lg px-4 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">{a.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {a.actor?.name ?? 'System'} · {a.project.name}
+                    {a.meta ? ` · ${a.meta}` : ''} · {new Date(a.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Danger zone — delete workspace */}
       {isAdmin && (

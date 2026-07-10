@@ -89,3 +89,11 @@ export async function listInvites(req: Request, res: Response, next: NextFunctio
     res.json(result);
   } catch (err) { next(err); }
 }
+
+export async function getActivity(req: Request, res: Response, next: NextFunction) {
+  try {
+    const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+    const result = await workspaceService.getWorkspaceActivity(req.params.slug, req.user!.id, cursor);
+    res.json(result);
+  } catch (err) { next(err); }
+}

@@ -6,6 +6,7 @@ import { env } from './config/env';
 import { verifyAccessToken } from './lib/jwt';
 import { prisma } from './lib/prisma';
 import { corsOptions } from './config/cors';
+import { startScheduler } from './events/scheduler';
 
 const app = createApp();
 const httpServer = http.createServer(app);
@@ -130,6 +131,7 @@ const PORT = env.PORT;
 
 httpServer.listen(PORT, () => {
   console.log(`🚀 CollabSpace server running on port ${PORT} [${env.NODE_ENV}]`);
+  startScheduler();
 });
 
 // Graceful shutdown

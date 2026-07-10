@@ -11,6 +11,7 @@ const TABS = [
   { label: 'Board', href: '/board', clientVisible: true },
   { label: 'Channels', href: '/channels', clientVisible: true },
   { label: 'Files', href: '/files', clientVisible: true },
+  { label: 'Search', href: '/search', clientVisible: true },
   { label: 'Portal', href: '/portal', clientVisible: false },
   { label: 'Settings', href: '/settings', clientVisible: false },
 ];

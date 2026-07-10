@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
+import { buildActivityCopy } from '../dashboard/service';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import { env } from '../../config/env';
@@ -216,6 +217,36 @@ export async function getPendingInvites(slug: string, userId: string) {
     select: { id: true, email: true, role: true, expiresAt: true, createdAt: true },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+export async function getWorkspaceActivity(slug: string, userId: string, cursor?: string, limit = 30) {
+  const workspace = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  assertAdmin(workspace.members, userId);
+
+  const rows = await prisma.activityLog.findMany({
+    where: {
+      project: { workspaceId: workspace.id },
+      ...(cursor ? { createdAt: { lt: new Date(cursor) } } : {}),
+    },
+    include: { project: { select: { id: true, name: true } } },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  });
+
+  const items = rows.map((r) => {
+    const meta = (r.meta ?? {}) as Record<string, any>;
+    return {
+      id: r.id,
+      type: r.type,
+      ...buildActivityCopy(r.type, meta),
+      actor: (meta.actor ?? null) as { id: string; name: string; avatarUrl: string | null } | null,
+      project: r.project,
+      createdAt: r.createdAt,
+    };
+  });
+
+  return { items, nextCursor: items.length === limit ? items[items.length - 1].createdAt.toISOString() : null };
 }
 
 // ─── Guards ───────────────────────────────────────────────────────────────────
