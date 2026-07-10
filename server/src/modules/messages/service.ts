@@ -62,8 +62,9 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
     }
   }
 
-  // Log top-level messages to the project activity feed.
+  // Log top-level messages to the project activity feed + broadcast in real time.
   if (!message.parentId) {
+    io.to(`channel:${channelId}`).emit('message:new', message);
     await logActivity({
       projectId: channel.projectId,
       actorId: authorId,

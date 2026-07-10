@@ -77,11 +77,15 @@ export async function revokePortalToken(projectId: string, actorId: string) {
 export async function acceptClientInvite(inviteToken: string) {
   const invite = await prisma.inviteToken.findUnique({ where: { token: inviteToken } });
 
-  if (!invite || invite.expiresAt < new Date() || invite.acceptedAt) {
-    throw new AppError(400, 'This invite link is invalid or has expired.');
-  }
+  if (!invite) throw new AppError(400, 'This invite link is invalid.');
   if (!invite.projectId || invite.role !== 'CLIENT') {
     throw new AppError(400, 'This is not a client invite.');
+  }
+  // Idempotent: re-clicking an already-accepted link (or a StrictMode double-call)
+  // should re-issue a session, not error. Only a never-accepted invite can expire.
+  const firstAccept = !invite.acceptedAt;
+  if (firstAccept && invite.expiresAt < new Date()) {
+    throw new AppError(400, 'This invite link has expired. Ask your team to resend it.');
   }
 
   const project = await prisma.project.findUnique({
@@ -150,26 +154,28 @@ export async function acceptClientInvite(inviteToken: string) {
 
   await prisma.$transaction(txOps);
 
-  // Notify the inviter that their invite was accepted.
-  if (invite.createdById) {
-    await prisma.notification.create({
-      data: {
-        recipientId: invite.createdById,
-        actorId: userId,
-        type: 'INVITE_ACCEPTED',
-        meta: { projectId: project.id },
-      },
-    });
-    io.to(`user:${invite.createdById}`).emit('notification:new');
-  }
+  // Only notify/log on the first acceptance — not on every re-click of the link.
+  if (firstAccept) {
+    if (invite.createdById) {
+      await prisma.notification.create({
+        data: {
+          recipientId: invite.createdById,
+          actorId: userId,
+          type: 'INVITE_ACCEPTED',
+          meta: { projectId: project.id },
+        },
+      });
+      io.to(`user:${invite.createdById}`).emit('notification:new');
+    }
 
-  await logActivity({
-    projectId: project.id,
-    actorId: userId,
-    type: 'MEMBER_JOINED',
-    clientVisible: true,
-    meta: { memberName: normalizedEmail.split('@')[0], role: 'CLIENT' },
-  });
+    await logActivity({
+      projectId: project.id,
+      actorId: userId,
+      type: 'MEMBER_JOINED',
+      clientVisible: true,
+      meta: { memberName: normalizedEmail.split('@')[0], role: 'CLIENT' },
+    });
+  }
 
   return { sessionToken: sessionTokenValue, projectId: project.id };
 }

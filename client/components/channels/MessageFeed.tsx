@@ -35,6 +35,9 @@ export default function MessageFeed({ channelId }: { channelId: string }) {
         ['messages', channelId],
         (old) => {
           if (!old) return old;
+          // Dedupe: the sender already added this optimistically, and the server
+          // echoes to everyone in the room (including the sender).
+          if (old.pages.some((p) => p.messages.some((m) => m.id === msg.id))) return old;
           const pages = [...old.pages];
           pages[pages.length - 1] = {
             ...pages[pages.length - 1],

@@ -1,7 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { storageConfig } from '../../config/storage';
-import { generateUploadSignature, buildCloudinaryUrl, deleteCloudinaryAsset } from '../../lib/cloudinary';
+import { generateUploadSignature } from '../../lib/cloudinary';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
 import type { PresignUploadInput, ConfirmUploadInput } from './schema';
@@ -22,6 +22,17 @@ export async function presignUpload(projectId: string, userId: string, input: Pr
   return signatureData;
 }
 
+/** Strip control chars and path separators (/ and backslash); keep spaces/dashes/dots. */
+function sanitizeFileName(name: string): string {
+  const BACKSLASH = String.fromCharCode(92);
+  const cleaned = Array.from(name)
+    .filter((ch) => ch.charCodeAt(0) >= 32 && ch !== '/' && ch !== BACKSLASH)
+    .join('')
+    .trim()
+    .slice(0, 255);
+  return cleaned || 'file';
+}
+
 /**
  * After the client uploads to Cloudinary, it sends back the public_id + secure_url.
  */
@@ -32,11 +43,23 @@ export async function confirmUpload(
 ) {
   await assertTeamMember(projectId, userId);
 
+  // Re-validate on confirm — the client controls this payload (size is capped by the
+  // Zod schema). MIME was only checked at presign time.
+  if (!storageConfig.allowedMimeTypes.includes(input.mimeType as never)) {
+    throw new AppError(415, 'Unsupported file type');
+  }
+  // The uploaded asset must live in this project's folder — prevents attaching an
+  // arbitrary or another project's Cloudinary asset by passing its publicId.
+  const expectedPrefix = `${storageConfig.cloudinary.folder}/projects/${projectId}`;
+  if (!input.publicId.startsWith(expectedPrefix)) {
+    throw new AppError(400, 'Invalid upload reference');
+  }
+
   const file = await prisma.file.create({
     data: {
       projectId,
       uploadedById: userId,
-      name: input.name,
+      name: sanitizeFileName(input.name),
       mimeType: input.mimeType,
       sizeBytes: input.sizeBytes,
       storage: 'CLOUDINARY',

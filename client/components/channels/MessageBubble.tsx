@@ -6,7 +6,6 @@ import { MessageSquare, Pencil, Trash2, X, Send } from 'lucide-react';
 import { toast } from 'sonner';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
-import { useSocket } from '@/hooks/useSocket';
 import type { Message } from '@/types';
 
 const messageTimeFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -38,7 +37,6 @@ export default function MessageBubble({
 }) {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
-  const { emit } = useSocket();
   const isOwn = message.author.id === user?.id;
   const isDeleted = message.body === '[deleted]';
   const replyCount = message._count?.replies ?? 0;
@@ -86,8 +84,7 @@ export default function MessageBubble({
   const replyMutation = useMutation({
     mutationFn: (data: { body: string; parentId: string }) =>
       api.post(`/channels/${channelId}/messages`, data).then((r) => r.data as Message),
-    onSuccess: (reply) => {
-      emit('message:new', { channelId, message: reply });
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['thread', message.id] });
       queryClient.invalidateQueries({ queryKey: ['messages', channelId] });
       setReplyBody('');

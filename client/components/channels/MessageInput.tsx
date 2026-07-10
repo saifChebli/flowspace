@@ -4,7 +4,6 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
 import api from '@/lib/api';
-import { useSocket } from '@/hooks/useSocket';
 import type { Message } from '@/types';
 
 interface MemberInfo {
@@ -24,7 +23,6 @@ export default function MessageInput({
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIndex, setMentionIndex] = useState(0);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const { emit } = useSocket();
   const queryClient = useQueryClient();
 
   const filteredMembers = mentionQuery !== null
@@ -37,9 +35,8 @@ export default function MessageInput({
     mutationFn: (data: { body: string; mentionedUserIds?: string[] }) =>
       api.post(`/channels/${channelId}/messages`, data).then((r) => r.data as Message),
     onSuccess: (message) => {
-      // Broadcast to other users via socket
-      emit('message:new', { channelId, message });
-      // Add to own cache immediately (socket.to excludes the sender)
+      // The server broadcasts message:new to the channel room after DB insert.
+      // Add to our own cache immediately for snappy UX; MessageFeed dedupes the echo.
       queryClient.setQueryData<{ pages: { messages: Message[]; nextCursor?: string }[]; pageParams: unknown[] }>(
         ['messages', channelId],
         (old) => {

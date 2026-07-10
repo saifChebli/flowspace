@@ -27,6 +27,7 @@ const envSchema = z.object({
   CLOUDINARY_API_SECRET: z.string().optional(),
 
   CLIENT_URL: z.string().url().default('http://localhost:3000'),
+  CORS_EXTRA_ORIGINS: z.string().optional(), // comma-separated extra allowed origins
   RATE_LIMIT_WINDOW_MS: z.string().default('900000').transform(Number),
   RATE_LIMIT_MAX: z.string().default('1000').transform(Number),
 });

@@ -43,6 +43,36 @@ io.use(async (socket, next) => {
 
 // ─── Socket.io Event Handlers ─────────────────────────────────────────────────
 
+// Room-join authorization: verify DB membership before letting a socket into a
+// room. Without this, any authenticated user could join any channel/project room
+// and receive its real-time events (including PRIVATE channels).
+async function canAccessChannel(userId: string, channelId: string): Promise<boolean> {
+  const channel = await prisma.channel.findUnique({
+    where: { id: channelId },
+    select: { projectId: true, type: true },
+  });
+  if (!channel) return false;
+  const member = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: channel.projectId, userId } },
+  });
+  if (!member) return false;
+  if (member.role === 'CLIENT' && channel.type !== 'CLIENT_VISIBLE') return false;
+  if (channel.type === 'PRIVATE') {
+    const cm = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId } },
+    });
+    if (!cm) return false;
+  }
+  return true;
+}
+
+async function isProjectMember(userId: string, projectId: string): Promise<boolean> {
+  const m = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId, userId } },
+  });
+  return !!m;
+}
+
 io.on('connection', (socket) => {
   const user = socket.data.user as { id: string; name: string };
 
@@ -51,39 +81,33 @@ io.on('connection', (socket) => {
   // Auto-join a personal room for notifications
   socket.join(`user:${user.id}`);
 
-  // Join a channel room for real-time messages
-  socket.on('channel:join', (channelId: string) => {
-    socket.join(`channel:${channelId}`);
+  // Join a channel room for real-time messages — only if the user may access it.
+  socket.on('channel:join', async (channelId: string) => {
+    if (await canAccessChannel(user.id, channelId)) {
+      socket.join(`channel:${channelId}`);
+    }
   });
 
   socket.on('channel:leave', (channelId: string) => {
     socket.leave(`channel:${channelId}`);
   });
 
-  // Join a project room for board/task updates
-  socket.on('project:join', (projectId: string) => {
-    socket.join(`project:${projectId}`);
+  // Join a project room for board/task updates — only if the user is a member.
+  socket.on('project:join', async (projectId: string) => {
+    if (await isProjectMember(user.id, projectId)) {
+      socket.join(`project:${projectId}`);
+    }
   });
 
   socket.on('project:leave', (projectId: string) => {
     socket.leave(`project:${projectId}`);
   });
 
-  // Real-time message broadcast (called by REST handler after DB insert)
-  socket.on('message:new', (data: { channelId: string; message: unknown }) => {
-    socket.to(`channel:${data.channelId}`).emit('message:new', data.message);
-  });
+  // NOTE: message:new / task:moved / task:updated are now emitted authoritatively
+  // by the REST service layer after DB commit (see modules/messages & modules/tasks),
+  // not relayed from clients — so they can't be spoofed or injected.
 
-  // Task board updates — broadcast to project room
-  socket.on('task:updated', (data: { projectId: string; task: unknown }) => {
-    socket.to(`project:${data.projectId}`).emit('task:updated', data.task);
-  });
-
-  socket.on('task:moved', (data: { projectId: string; taskId: string; listId: string; position: number }) => {
-    socket.to(`project:${data.projectId}`).emit('task:moved', data);
-  });
-
-  // Typing indicators
+  // Typing indicators (ephemeral; only reach sockets already in the room)
   socket.on('typing:start', (channelId: string) => {
     socket.to(`channel:${channelId}`).emit('typing:start', { userId: user.id, name: user.name });
   });

@@ -55,6 +55,8 @@ export async function createTask(listId: string, userId: string, input: CreateTa
     }
   }
 
+  io.to(`project:${list.board.projectId}`).emit('task:updated');
+
   await logActivity({
     projectId: list.board.projectId,
     actorId: userId,
@@ -123,6 +125,8 @@ export async function updateTask(taskId: string, userId: string, input: UpdateTa
     }
   }
 
+  io.to(`project:${task.list.board.projectId}`).emit('task:updated');
+
   return updated;
 }
 
@@ -152,6 +156,8 @@ export async function moveTask(taskId: string, userId: string, input: MoveTaskIn
 
   const updated = await prisma.task.update({ where: { id: taskId }, data });
 
+  io.to(`project:${projectId}`).emit('task:moved', { taskId, listId: input.listId, position: input.position });
+
   await logActivity({
     projectId,
     actorId: userId,
@@ -170,6 +176,7 @@ export async function deleteTask(taskId: string, userId: string) {
 
   // Soft delete — never hard delete (PRD).
   await prisma.task.update({ where: { id: taskId }, data: { deletedAt: new Date() } });
+  io.to(`project:${task.list.board.projectId}`).emit('task:updated');
   return { message: 'Task deleted' };
 }
 
