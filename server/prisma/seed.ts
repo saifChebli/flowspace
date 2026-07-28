@@ -1,20 +1,31 @@
+import { randomBytes } from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+// DEV/DEMO DATA ONLY — never run against production.
+// The platform super-admin is created separately by `npm run seed:admin`
+// (env-driven, no credentials in source).
 async function main() {
-  console.log('🌱 Seeding database...');
+  if (process.env.NODE_ENV === 'production' && !process.env.ALLOW_DEMO_SEED) {
+    console.error('❌ Refusing to run the demo seed in production. Set ALLOW_DEMO_SEED=1 to override.');
+    process.exit(1);
+  }
 
-  // Create admin user
-  const passwordHash = await bcrypt.hash('Password123!', 12);
+  console.log('🌱 Seeding demo data...');
+
+  // Demo account. Password comes from env when provided, otherwise a random one
+  // is generated and printed — so no usable credentials live in the repo.
+  const demoPassword = process.env.DEMO_PASSWORD ?? randomBytes(12).toString('base64url');
+  const passwordHash = await bcrypt.hash(demoPassword, 12);
 
   const admin = await prisma.user.upsert({
-    where: { email: 'admin@collabspace.io' },
+    where: { email: 'demo@collabspace.local' },
     update: {},
     create: {
-      email: 'admin@collabspace.io',
-      name: 'Alex Admin',
+      email: 'demo@collabspace.local',
+      name: 'Demo User',
       passwordHash,
       emailVerified: true,
     },
@@ -79,9 +90,10 @@ async function main() {
     ],
   });
 
-  console.log('✅ Seed complete');
-  console.log(`   Admin: admin@collabspace.io / Password123!`);
+  console.log('✅ Demo seed complete');
+  console.log(`   Demo login: demo@collabspace.local / ${demoPassword}`);
   console.log(`   Workspace slug: acme-co`);
+  console.log('   (This account has no platform-admin rights — use `npm run seed:admin` for that.)');
 }
 
 main()

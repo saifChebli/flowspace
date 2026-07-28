@@ -7,8 +7,9 @@ export async function getStats(req: Request, res: Response, next: NextFunction) 
 
 export async function listWorkspaces(req: Request, res: Response, next: NextFunction) {
   try {
+    const q = typeof req.query.q === 'string' ? req.query.q : undefined;
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
-    res.json(await svc.listWorkspaces(cursor));
+    res.json(await svc.listWorkspaces(q, cursor));
   } catch (err) { next(err); }
 }
 
@@ -24,7 +25,8 @@ export async function listUsers(req: Request, res: Response, next: NextFunction)
   try {
     const q = typeof req.query.q === 'string' ? req.query.q : undefined;
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
-    res.json(await svc.listUsers(q, cursor));
+    const suspendedOnly = req.query.suspended === 'true';
+    res.json(await svc.listUsers(q, cursor, 30, suspendedOnly));
   } catch (err) { next(err); }
 }
 
