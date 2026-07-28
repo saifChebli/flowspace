@@ -8,6 +8,7 @@ interface User {
   email: string;
   name: string;
   avatarUrl: string | null;
+  isPlatformAdmin?: boolean;
 }
 
 interface AuthState {

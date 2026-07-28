@@ -97,3 +97,13 @@ export async function getActivity(req: Request, res: Response, next: NextFunctio
     res.json(result);
   } catch (err) { next(err); }
 }
+
+export async function exportWorkspace(req: Request, res: Response, next: NextFunction) {
+  try {
+    const archive = await workspaceService.buildWorkspaceExport(req.params.slug, req.user!.id);
+    res.attachment(`${req.params.slug}-export-${Date.now()}.zip`);
+    archive.on('error', (err: Error) => next(err));
+    archive.pipe(res);
+    await archive.finalize();
+  } catch (err) { next(err); }
+}

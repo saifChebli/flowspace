@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import { prisma } from '../../lib/prisma';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../lib/jwt';
 import { sendEmail, verifyEmailTemplate, passwordResetTemplate } from '../../lib/email';
+import { isPlatformAdmin } from '../../middleware/platformAdmin';
 import { AppError } from '../../middleware/errorHandler';
 import { env } from '../../config/env';
 import type {
@@ -65,6 +66,8 @@ export async function verifyEmail(token: string) {
 export async function login(input: LoginInput) {
   const user = await prisma.user.findUnique({ where: { email: input.email } });
   if (!user) throw new AppError(401, 'Invalid credentials');
+
+  if (user.suspendedAt) throw new AppError(403, 'This account has been suspended.');
 
   if (!user.passwordHash) {
     throw new AppError(403, 'This account uses portal access. Open your portal link or set a password first.');
@@ -157,7 +160,7 @@ export async function getMe(userId: string) {
     select: { id: true, email: true, name: true, avatarUrl: true, createdAt: true },
   });
   if (!user) throw new AppError(404, 'User not found');
-  return user;
+  return { ...user, isPlatformAdmin: isPlatformAdmin(user.email) };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

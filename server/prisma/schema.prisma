@@ -64,6 +64,7 @@ model User {
   avatarUrl              String?
   passwordHash           String? // null = portal-only (passwordless) account
   emailVerified          Boolean   @default(false)
+  suspendedAt            DateTime? // set by a platform admin; blocks login
   emailVerifyToken       String? // stores SHA-256 hash of raw token
   emailVerifyTokenExpiry DateTime?
   resetToken             String? // stores SHA-256 hash of raw token

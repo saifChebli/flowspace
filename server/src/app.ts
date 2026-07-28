@@ -21,6 +21,7 @@ import notificationsRouter from './modules/notifications/router';
 import dashboardRouter from './modules/dashboard/router';
 import portalRouter from './modules/portal/router';
 import searchRouter from './modules/search/router';
+import platformAdminRouter from './modules/platformAdmin/router';
 
 export function createApp() {
   const app = express();
@@ -73,6 +74,7 @@ export function createApp() {
   app.use('/api/projects/:projectId/search', searchRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/portal', portalRouter);
+  app.use('/api/admin', platformAdminRouter);
 
   // ─── 404 handler ──────────────────────────────────────────────────────────
   app.use((_req, res) => {

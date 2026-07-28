@@ -112,6 +112,25 @@ export default function WorkspaceSettingsPage() {
     },
   });
 
+  // ─── Export ───────────────────────────────────────────────────────────
+  const [exporting, setExporting] = useState(false);
+  async function exportWorkspace() {
+    setExporting(true);
+    try {
+      const res = await api.get(`/workspaces/${workspaceSlug}/export`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data as Blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${workspaceSlug}-export.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // ─── Delete workspace ─────────────────────────────────────────────────
   const [deleteConfirm, setDeleteConfirm] = useState('');
   const deleteWorkspace = useMutation({
@@ -294,6 +313,23 @@ export default function WorkspaceSettingsPage() {
           ))}
         </div>
       </div>
+
+      {/* Export workspace data */}
+      {isAdmin && (
+        <div className="soft-card rounded-xl p-5">
+          <h3 className="section-kicker">Export workspace data</h3>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Download a ZIP with every project&apos;s tasks, conversations, and files.
+          </p>
+          <button
+            onClick={exportWorkspace}
+            disabled={exporting}
+            className="secondary-button mt-3 px-4 py-2 text-sm disabled:opacity-60"
+          >
+            {exporting ? 'Preparing export…' : 'Download export'}
+          </button>
+        </div>
+      )}
 
       {/* Activity log (admin audit view) */}
       {isAdmin && activity && activity.items.length > 0 && (

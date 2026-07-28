@@ -1,6 +1,8 @@
+import archiver from 'archiver';
 import { prisma } from '../../lib/prisma';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { buildActivityCopy } from '../dashboard/service';
+import { toCsv } from '../../lib/csv';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import { env } from '../../config/env';
@@ -249,13 +251,70 @@ export async function getWorkspaceActivity(slug: string, userId: string, cursor?
   return { items, nextCursor: items.length === limit ? items[items.length - 1].createdAt.toISOString() : null };
 }
 
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+// ponytail: synchronous in-request export — fine at current scale; move to a
+// background job + polling if a workspace export starts timing out.
+export async function buildWorkspaceExport(slug: string, userId: string) {
+  const workspace = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  assertAdmin(workspace.members, userId);
+
+  const projects = await prisma.project.findMany({
+    where: { workspaceId: workspace.id },
+    include: {
+      boards: { include: { lists: { include: { tasks: { where: { deletedAt: null } } } } } },
+      channels: { include: { messages: { where: { deletedAt: null }, include: { author: { select: { name: true } } } } } },
+      files: true,
+    },
+  });
+
+  const archive = archiver('zip', { zlib: { level: 9 } });
+
+  for (const project of projects) {
+    const dir = slugify(project.name) || project.id;
+
+    const tasks = project.boards.flatMap((b) =>
+      b.lists.flatMap((l) =>
+        l.tasks.map((t) => ({
+          title: t.title,
+          description: t.description ?? '',
+          priority: t.priority,
+          status: t.status,
+          dueDate: t.dueDate?.toISOString() ?? '',
+          createdAt: t.createdAt.toISOString(),
+        })),
+      ),
+    );
+    archive.append(toCsv(tasks), { name: `${dir}/tasks.csv` });
+
+    const conversations = project.channels.map((c) => ({
+      channel: c.name,
+      messages: c.messages.map((m) => ({ author: m.author.name, body: m.body, createdAt: m.createdAt.toISOString() })),
+    }));
+    archive.append(JSON.stringify(conversations, null, 2), { name: `${dir}/conversations.json` });
+
+    for (const file of project.files) {
+      try {
+        const res = await fetch(file.url);
+        if (!res.ok || !res.body) continue;
+        archive.append(Buffer.from(await res.arrayBuffer()), { name: `${dir}/files/${file.name}` });
+      } catch {
+        // Skip files that can't be fetched — don't fail the whole export.
+      }
+    }
+  }
+
+  return archive;
+}
+
 // ─── Guards ───────────────────────────────────────────────────────────────────
 
 function assertMember(members: { userId: string }[], userId: string) {
   if (!members.some((m) => m.userId === userId)) throw new AppError(403, 'Not a workspace member');
 }
 
-function assertAdmin(members: { userId: string; role: string }[], userId: string) {
+export function assertAdmin(members: { userId: string; role: string }[], userId: string) {
   const member = members.find((m) => m.userId === userId);
   if (!member) throw new AppError(403, 'Not a workspace member');
   if (member.role !== 'ADMIN') throw new AppError(403, 'Admin access required');
