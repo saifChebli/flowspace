@@ -2,9 +2,12 @@
 
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { initSentry } from '@/lib/sentry';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
+  useEffect(() => { initSentry(); }, []);
+
   const [queryClient] = useState(
     () =>
       new QueryClient({

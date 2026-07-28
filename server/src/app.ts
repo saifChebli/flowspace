@@ -7,6 +7,7 @@ import { corsOptions } from './config/cors';
 import { env } from './config/env';
 import { globalRateLimiter } from './middleware/rateLimiter';
 import { errorHandler } from './middleware/errorHandler';
+import { Sentry, isSentryEnabled } from './lib/sentry';
 
 // Module routers
 import authRouter from './modules/auth/router';
@@ -22,6 +23,7 @@ import dashboardRouter from './modules/dashboard/router';
 import portalRouter from './modules/portal/router';
 import searchRouter from './modules/search/router';
 import platformAdminRouter from './modules/platformAdmin/router';
+import publicRouter from './modules/public/router';
 
 export function createApp() {
   const app = express();
@@ -75,11 +77,20 @@ export function createApp() {
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/portal', portalRouter);
   app.use('/api/admin', platformAdminRouter);
+  app.use('/api/public', publicRouter);
 
   // ─── 404 handler ──────────────────────────────────────────────────────────
   app.use((_req, res) => {
     res.status(404).json({ error: 'Route not found' });
   });
+
+  // ─── Error tracking (before our handler, which swallows the error) ────────
+  if (isSentryEnabled()) {
+    Sentry.setupExpressErrorHandler(app, {
+      // Only report genuine faults — not 4xx validation/permission responses.
+      shouldHandleError: (error) => Number(error.statusCode ?? 500) >= 500,
+    });
+  }
 
   // ─── Global error handler ─────────────────────────────────────────────────
   app.use(errorHandler);

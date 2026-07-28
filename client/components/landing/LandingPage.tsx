@@ -10,11 +10,27 @@ import './landing.css';
 
 const SECTION_IDS = ['features', 'how-it-works', 'pricing', 'faq'] as const;
 
+interface PublicStats {
+  workspaces: number;
+  projects: number;
+  tasksCompleted: number;
+}
+
 export default function LandingPage() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('');
   const [annual, setAnnual] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const [stats, setStats] = useState<PublicStats | null>(null);
+
+  /* ── Real platform stats (no fabricated social proof) ───── */
+  useEffect(() => {
+    const base = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:5000/api';
+    fetch(`${base}/public/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => d && setStats(d))
+      .catch(() => {}); // stats are decorative — never block the page
+  }, []);
 
   /* ── Scroll spy ─────────────────────────────────────────── */
   useEffect(() => {
@@ -158,7 +174,7 @@ export default function LandingPage() {
           <div className="lp-hero-item" style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', justifyContent: 'center' }}>
               <Link href="/auth/register" className="lp-cta lp-cta-primary" style={{ padding: '16px 32px', fontSize: 16 }}>Start Free — No credit card</Link>
-              <button onClick={() => scrollTo('features')} style={{ background: 'none', border: 'none', color: 'var(--lp-text-secondary)', fontSize: 16, cursor: 'pointer', transition: 'color 0.2s' }}>See a live demo →</button>
+              <button onClick={() => scrollTo('features')} style={{ background: 'none', border: 'none', color: 'var(--lp-text-secondary)', fontSize: 16, cursor: 'pointer', transition: 'color 0.2s' }}>See how it works →</button>
             </div>
             <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap', justifyContent: 'center' }}>
               {['Free forever plan', 'No credit card needed', 'Setup in 2 minutes'].map((t) => (
@@ -169,15 +185,21 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Stats row */}
-          <div className="lp-hero-item" style={{ marginTop: 48, display: 'flex', justifyContent: 'center', gap: 48, flexWrap: 'wrap' }}>
-            {[{ n: '2,400+', l: 'Active workspaces' }, { n: '18,000+', l: 'Tasks completed' }, { n: '4.9★', l: 'Average rating' }].map((s) => (
-              <div key={s.l} style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--lp-text)' }}>{s.n}</div>
-                <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)' }}>{s.l}</div>
-              </div>
-            ))}
-          </div>
+          {/* Stats row — real platform numbers, hidden until there's data to show */}
+          {stats && stats.workspaces > 0 && (
+            <div className="lp-hero-item" style={{ marginTop: 48, display: 'flex', justifyContent: 'center', gap: 48, flexWrap: 'wrap' }}>
+              {[
+                { n: stats.workspaces, l: stats.workspaces === 1 ? 'Workspace' : 'Workspaces' },
+                { n: stats.projects, l: stats.projects === 1 ? 'Active project' : 'Active projects' },
+                { n: stats.tasksCompleted, l: 'Tasks completed' },
+              ].map((s) => (
+                <div key={s.l} style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: 28, fontWeight: 700, color: 'var(--lp-text)' }}>{s.n.toLocaleString()}</div>
+                  <div style={{ fontSize: 13, color: 'var(--lp-text-secondary)' }}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Hero browser mockup */}
@@ -188,12 +210,12 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── 3 · Logo Bar ────────────────────────────────────── */}
+      {/* ─── 3 · Value bar ───────────────────────────────────── */}
       <section className="lp-reveal" style={{ background: 'var(--lp-bg-surface)', borderTop: '1px solid var(--lp-border)', borderBottom: '1px solid var(--lp-border)', padding: '40px 24px' }}>
         <div style={{ maxWidth: 1200, margin: '0 auto', textAlign: 'center' }}>
-          <p style={{ fontSize: 13, color: 'var(--lp-text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 24 }}>Trusted by freelancers and agencies at</p>
+          <p style={{ fontSize: 13, color: 'var(--lp-text-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 24 }}>Everything a client project needs, in one place</p>
           <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-evenly', alignItems: 'center', gap: '16px 40px' }}>
-            {['Pixel Studio', 'Forge Agency', 'Nomad Labs', 'Crestline Co.', 'Wavefront', 'Arclight Studio'].map((n) => (
+            {['Real-time channels', 'Kanban boards', 'File sharing', 'Client portal', '@mentions', 'Activity log'].map((n) => (
               <span key={n} style={{ fontWeight: 600, fontSize: 15, color: 'var(--lp-text-muted)' }}>{n}</span>
             ))}
           </div>
@@ -271,26 +293,19 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ─── 7 · Testimonials ─────────────────────────────────── */}
+      {/* ─── 7 · Who it's for ─────────────────────────────────── */}
       <section className="lp-section lp-reveal">
         <div style={{ textAlign: 'center', maxWidth: 600, margin: '0 auto 64px' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--lp-accent)' }}>What people are saying</span>
-          <h2 style={{ fontSize: 'clamp(28px, 3.5vw, 42px)', fontWeight: 600, marginTop: 16, lineHeight: 1.2 }}>Freelancers and agencies love it.</h2>
+          <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--lp-accent)' }}>Who it&apos;s for</span>
+          <h2 style={{ fontSize: 'clamp(28px, 3.5vw, 42px)', fontWeight: 600, marginTop: 16, lineHeight: 1.2 }}>Built for client work.</h2>
         </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 24, maxWidth: 1100, margin: '0 auto' }}>
-          {TESTIMONIALS.map((t, i) => (
-            <div key={i} className="lp-stagger" style={{ background: 'var(--lp-bg-surface)', border: `1px solid ${i === 1 ? 'rgba(15,118,110,0.3)' : 'var(--lp-border)'}`, borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', gap: 16, ...(i === 1 ? { transform: 'translateY(-4px)', boxShadow: '0 8px 32px rgba(15,118,110,0.1)' } : {}) }}>
-              <div style={{ color: 'var(--lp-accent-2)', fontSize: 16, letterSpacing: 2 }}>★★★★★</div>
-              <p style={{ fontSize: 15, color: 'var(--lp-text-secondary)', lineHeight: 1.7, flex: 1 }}>&ldquo;{t.quote}&rdquo;</p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div style={{ width: 36, height: 36, borderRadius: '50%', background: t.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'white' }}>{t.initials}</div>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--lp-text)' }}>{t.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--lp-text-muted)' }}>{t.role}</div>
-                </div>
-              </div>
-              {i === 1 && <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--lp-accent)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Most popular for agencies</span>}
+          {AUDIENCES.map((a, i) => (
+            <div key={i} className="lp-stagger" style={{ background: 'var(--lp-bg-surface)', border: '1px solid var(--lp-border)', borderRadius: 12, padding: 28, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ fontSize: 24 }}>{a.icon}</div>
+              <h3 style={{ fontSize: 17, fontWeight: 600, color: 'var(--lp-text)' }}>{a.title}</h3>
+              <p style={{ fontSize: 14, color: 'var(--lp-text-secondary)', lineHeight: 1.7 }}>{a.desc}</p>
             </div>
           ))}
         </div>
@@ -350,7 +365,7 @@ export default function LandingPage() {
         </div>
 
         <p style={{ textAlign: 'center', marginTop: 32, fontSize: 13, color: 'var(--lp-text-muted)' }}>
-          All plans include: 14-day full-featured trial · Cancel anytime · GDPR compliant · Data export always available
+          All plans include: 14-day full-featured trial · Cancel anytime · Data export always available
         </p>
       </section>
 
@@ -387,13 +402,8 @@ export default function LandingPage() {
           <h2 style={{ fontSize: 'clamp(36px, 5vw, 72px)', fontFamily: 'var(--font-instrument-serif, "Instrument Serif", serif)', fontStyle: 'italic', fontWeight: 400, lineHeight: 1.1 }}>Start building your first workspace today.</h2>
           <p style={{ marginTop: 20, fontSize: 18, color: 'var(--lp-text-secondary)' }}>Free forever. No credit card. Setup in minutes.</p>
           <Link href="/auth/register" className="lp-cta lp-cta-primary" style={{ padding: '20px 48px', fontSize: 18, marginTop: 40, display: 'inline-flex', borderRadius: 12 }}>Create Your Free Workspace →</Link>
-          <div style={{ marginTop: 28, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, fontSize: 13, color: 'var(--lp-text-muted)' }}>
-            <div style={{ display: 'flex' }}>
-              {['AM', 'PN', 'CV', 'MJ', 'AL'].map((init, i) => (
-                <div key={init} style={{ width: 28, height: 28, borderRadius: '50%', background: ['#0f766e', '#b7791f', '#8b5cf6', '#ef4444', '#06b6d4'][i], border: '2px solid var(--lp-bg)', marginLeft: i === 0 ? 0 : -8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white' }}>{init}</div>
-              ))}
-            </div>
-            Join 2,400+ workspaces already using CollabSpace
+          <div style={{ marginTop: 28, fontSize: 13, color: 'var(--lp-text-muted)' }}>
+            Free forever plan · Export your data anytime · No lock-in
           </div>
         </div>
       </section>
@@ -408,17 +418,24 @@ export default function LandingPage() {
               <span style={{ fontWeight: 600, fontSize: 15, color: 'var(--lp-text)' }}>CollabSpace</span>
             </div>
             <p style={{ fontSize: 14, color: 'var(--lp-text-secondary)', lineHeight: 1.6, maxWidth: 200 }}>The unified workspace for freelancers and agencies.</p>
-            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              {['X', 'GH', 'Li'].map((label) => (
-                <span key={label} style={{ width: 32, height: 32, borderRadius: 6, border: '1px solid var(--lp-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: 'var(--lp-text-secondary)', cursor: 'pointer' }}>{label}</span>
-              ))}
-            </div>
+            <p style={{ fontSize: 13, color: 'var(--lp-text-muted)', marginTop: 16 }}>Currently in public beta.</p>
           </div>
 
-          <FooterCol title="Product" links={['Features', 'Pricing', 'Changelog', 'Roadmap', 'Status']} />
-          <FooterCol title="For Teams" links={['Freelancers', 'Small Agencies', 'Remote Teams', 'Startups', 'Designers']} />
-          <FooterCol title="Resources" links={['Documentation', 'API Reference', 'Blog', 'Community', 'Templates']} />
-          <FooterCol title="Company" links={['About', 'Careers', 'Press Kit', 'Contact', 'Privacy Policy', 'Terms']} />
+          <FooterCol title="Product" links={[
+            { label: 'Features', href: '#features' },
+            { label: 'How it works', href: '#how-it-works' },
+            { label: 'Pricing', href: '#pricing' },
+            { label: 'FAQ', href: '#faq' },
+          ]} />
+          <FooterCol title="Get started" links={[
+            { label: 'Create a workspace', href: '/auth/register' },
+            { label: 'Sign in', href: '/auth/login' },
+          ]} />
+          <FooterCol title="Legal" links={[
+            { label: 'Privacy Policy', href: '/privacy' },
+            { label: 'Terms of Service', href: '/terms' },
+            { label: 'Contact', href: '/contact' },
+          ]} />
         </div>
 
         <div style={{ maxWidth: 1200, margin: '0 auto', borderTop: '1px solid var(--lp-border)', paddingTop: 24, marginTop: 48, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, fontSize: 13, color: 'var(--lp-text-muted)' }}>
@@ -443,13 +460,15 @@ function LogoMark() {
   );
 }
 
-function FooterCol({ title, links }: { title: string; links: string[] }) {
+function FooterCol({ title, links }: { title: string; links: { label: string; href: string }[] }) {
   return (
     <div>
       <p style={{ fontSize: 13, textTransform: 'uppercase', letterSpacing: '0.1em', color: 'var(--lp-text-muted)', marginBottom: 16, fontWeight: 600 }}>{title}</p>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {links.map((l) => (
-          <span key={l} style={{ fontSize: 14, color: 'var(--lp-text-secondary)', cursor: 'pointer', transition: 'color 0.2s' }}>{l}</span>
+          <Link key={l.label} href={l.href} style={{ fontSize: 14, color: 'var(--lp-text-secondary)', textDecoration: 'none', transition: 'color 0.2s' }}>
+            {l.label}
+          </Link>
         ))}
       </div>
     </div>
@@ -873,18 +892,21 @@ const STEPS = [
   { num: '04', title: 'Collaborate and ship', desc: 'Your team works in channels and tasks. Your client stays updated. Everyone knows what\'s happening. Projects actually finish on time.' },
 ];
 
-const TESTIMONIALS = [
+const AUDIENCES = [
   {
-    quote: 'We used to spend the first 15 minutes of every client call explaining where things stood. Now we just send them the portal link. Game changer.',
-    name: 'Alex Mercer', role: 'Freelance Developer, 7 years', initials: 'AM', bg: '#0f766e',
+    icon: '👩‍💻',
+    title: 'Freelancers',
+    desc: 'Run every client engagement in its own workspace. Stop rewriting the same status update — send a portal link instead.',
   },
   {
-    quote: 'CollabSpace replaced Slack, Trello, AND our client reporting email. That\'s three subscriptions cancelled in one week. Our clients are actually responding faster now because everything is in one place.',
-    name: 'Priya Nair', role: 'Founder, Inkwell Agency (8 people)', initials: 'PN', bg: '#b7791f',
+    icon: '🏢',
+    title: 'Small agencies',
+    desc: 'Keep internal discussion separate from what the client sees. Onboard a new contributor without a three-day context dump.',
   },
   {
-    quote: 'As a client, I always felt like I was interrupting when I asked for updates. Now I just check the portal. I love being able to see task progress without bothering the team.',
-    name: 'Carlos Vega', role: 'Product Manager, Startup Client', initials: 'CV', bg: '#3A1F1F',
+    icon: '🤝',
+    title: 'Their clients',
+    desc: 'A read-only portal with progress, files, and a channel to reach the team — no account to create, no password to remember.',
   },
 ];
 
@@ -899,7 +921,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Can I migrate from Trello / Slack?',
-    a: 'We support CSV import for tasks (Trello-compatible format). For Slack, you can export your message history and we\'ll provide an import tool. Most teams run CollabSpace alongside their current tools for 1–2 weeks during migration. Our onboarding guide walks you through the full process.',
+    a: 'Importers for Trello (CSV) and Slack message history are on our roadmap and not available yet — today, migration means creating your projects and boards in CollabSpace directly. Most teams run CollabSpace alongside their current tools for a week or two while they switch over. You can always export everything back out.',
   },
   {
     q: 'What happens if I exceed the Free plan limits?',
@@ -907,7 +929,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Is my data secure? Can I export it?',
-    a: 'Data is encrypted at rest (AES-256) and in transit (TLS 1.3). We\'re GDPR compliant with EU data processing agreements available. You can export all your workspace data (projects, messages, tasks, files) as a JSON archive at any time from Settings — no support ticket required. We don\'t hold your data hostage.',
+    a: 'Data is encrypted in transit (HTTPS/TLS) and at rest by our database provider. Passwords are hashed with bcrypt, and client portal links use expiring session tokens. You can export all your workspace data — projects, tasks, conversations, and files — as a ZIP archive at any time from workspace settings, no support ticket required. We don\'t hold your data hostage. We\'re a small team in public beta, so we don\'t yet hold formal certifications like SOC 2.',
   },
   {
     q: 'Do clients need a CollabSpace account?',

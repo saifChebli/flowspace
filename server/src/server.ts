@@ -1,4 +1,9 @@
 import 'dotenv/config';
+import { initSentry } from './lib/sentry';
+
+// Must run before the app and its instrumented libraries are loaded.
+initSentry();
+
 import http from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import { createApp } from './app';
