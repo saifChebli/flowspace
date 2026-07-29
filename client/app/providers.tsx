@@ -4,9 +4,28 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'sonner';
 import { useState, useEffect } from 'react';
 import { initSentry } from '@/lib/sentry';
+import { useAuthStore } from '@/stores/authStore';
 
 export default function Providers({ children }: { children: React.ReactNode }) {
-  useEffect(() => { initSentry(); }, []);
+  const bootstrap = useAuthStore((s) => s.bootstrap);
+  const bootstrapped = useAuthStore((s) => s.bootstrapped);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const accessToken = useAuthStore((s) => s.accessToken);
+
+  // Persisted state only exists on the client, so decide after mount — otherwise
+  // SSR (logged out) and first client render (logged in) disagree and React warns.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    initSentry();
+    bootstrap();
+  }, [bootstrap]);
+
+  // The access token is memory-only, so after a reload a persisted session needs
+  // re-minting from the refresh cookie. Hold render for just that case — logged-out
+  // visitors and the marketing page are unaffected.
+  const restoringSession = mounted && isAuthenticated && !accessToken && !bootstrapped;
 
   const [queryClient] = useState(
     () =>
@@ -22,7 +41,13 @@ export default function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {children}
+      {restoringSession ? (
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-gold border-t-transparent" />
+        </div>
+      ) : (
+        children
+      )}
       <Toaster
         position="bottom-right"
         toastOptions={{
