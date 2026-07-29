@@ -21,6 +21,13 @@ export async function deleteWorkspace(req: Request, res: Response, next: NextFun
   try { res.json(await svc.deleteWorkspace(req.params.id)); } catch (err) { next(err); }
 }
 
+export async function setWorkspacePlan(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { plan, expiresAt } = req.body ?? {};
+    res.json(await svc.setWorkspacePlan(req.params.id, plan, expiresAt));
+  } catch (err) { next(err); }
+}
+
 export async function listUsers(req: Request, res: Response, next: NextFunction) {
   try {
     const q = typeof req.query.q === 'string' ? req.query.q : undefined;

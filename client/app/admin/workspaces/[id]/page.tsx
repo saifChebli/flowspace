@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useQuery, useMutation } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import api from '@/lib/api';
 import { toast } from 'sonner';
@@ -12,6 +12,8 @@ type WorkspaceDetail = {
   id: string;
   name: string;
   slug: string;
+  plan: 'FREE' | 'PRO' | 'AGENCY';
+  planExpiresAt: string | null;
   createdAt: string;
   members: { userId: string; role: string; user: { name: string; email: string; suspendedAt: string | null } }[];
   projects: { id: string; name: string; archived: boolean; createdAt: string }[];
@@ -22,11 +24,21 @@ type WorkspaceDetail = {
 export default function AdminWorkspaceDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [confirmSlug, setConfirmSlug] = useState('');
 
   const { data } = useQuery<WorkspaceDetail>({
     queryKey: ['admin-workspace', id],
     queryFn: () => api.get(`/admin/workspaces/${id}`).then((r) => r.data),
+  });
+
+  const setPlan = useMutation({
+    mutationFn: (plan: string) => api.post(`/admin/workspaces/${id}/plan`, { plan }),
+    onSuccess: () => {
+      toast.success('Plan updated');
+      queryClient.invalidateQueries({ queryKey: ['admin-workspace', id] });
+    },
+    onError: () => toast.error('Could not update plan'),
   });
 
   const deleteWorkspace = useMutation({
@@ -53,7 +65,20 @@ export default function AdminWorkspaceDetailPage() {
             <h2 className="text-xl font-bold tracking-tight">{data.name}</h2>
             <p className="mt-1 font-mono text-xs text-muted-foreground">{data.slug}</p>
           </div>
-          <span className="pill-muted text-xs">Created {new Date(data.createdAt).toLocaleDateString()}</span>
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-muted-foreground">Plan</label>
+            <select
+              value={data.plan}
+              onChange={(e) => setPlan.mutate(e.target.value)}
+              disabled={setPlan.isPending}
+              className="field-select min-h-0 min-w-0 px-2 py-1 text-xs"
+            >
+              <option value="FREE">Free</option>
+              <option value="PRO">Pro</option>
+              <option value="AGENCY">Agency</option>
+            </select>
+            <span className="pill-muted text-xs">Created {new Date(data.createdAt).toLocaleDateString()}</span>
+          </div>
         </div>
 
         <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4">

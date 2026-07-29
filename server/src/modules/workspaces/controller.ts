@@ -98,6 +98,12 @@ export async function getActivity(req: Request, res: Response, next: NextFunctio
   } catch (err) { next(err); }
 }
 
+export async function getUsage(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await workspaceService.getWorkspaceUsageBySlug(req.params.slug, req.user!.id));
+  } catch (err) { next(err); }
+}
+
 export async function exportWorkspace(req: Request, res: Response, next: NextFunction) {
   try {
     const archive = await workspaceService.buildWorkspaceExport(req.params.slug, req.user!.id);

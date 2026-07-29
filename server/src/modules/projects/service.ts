@@ -5,6 +5,7 @@ import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput, 
 import { sendEmail, inviteEmailTemplate, clientInviteEmailTemplate } from '../../lib/email';
 import { env } from '../../config/env';
 import { logActivity } from '../../events/activity';
+import { assertCanCreateProject } from '../plans/service';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,8 @@ export async function createProject(workspaceSlug: string, userId: string, input
   if (isClientOnly && !isWorkspaceAdmin(workspace.members, userId)) {
     throw new AppError(403, 'Client users cannot create projects');
   }
+
+  await assertCanCreateProject(workspace.id);
 
   return prisma.project.create({
     data: {
@@ -127,6 +130,9 @@ export async function unarchiveProject(projectId: string, userId: string) {
   if (!isWorkspaceAdmin(project.workspace.members, userId)) {
     throw new AppError(403, 'Only workspace admins can unarchive projects');
   }
+
+  // Unarchiving adds to the active-project count, so it's subject to the same limit.
+  await assertCanCreateProject(project.workspaceId);
 
   return prisma.project.update({ where: { id: projectId }, data: { archived: false } });
 }

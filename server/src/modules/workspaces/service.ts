@@ -3,6 +3,7 @@ import { prisma } from '../../lib/prisma';
 import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { buildActivityCopy } from '../dashboard/service';
 import { toCsv } from '../../lib/csv';
+import { getWorkspaceUsage } from '../plans/service';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import { env } from '../../config/env';
@@ -249,6 +250,13 @@ export async function getWorkspaceActivity(slug: string, userId: string, cursor?
   });
 
   return { items, nextCursor: items.length === limit ? items[items.length - 1].createdAt.toISOString() : null };
+}
+
+export async function getWorkspaceUsageBySlug(slug: string, userId: string) {
+  const workspace = await prisma.workspace.findUnique({ where: { slug }, include: { members: true } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  assertMember(workspace.members, userId);
+  return getWorkspaceUsage(workspace.id);
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────

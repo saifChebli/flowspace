@@ -10,6 +10,7 @@ type WorkspaceRow = {
   id: string;
   name: string;
   slug: string;
+  plan: 'FREE' | 'PRO' | 'AGENCY';
   createdAt: string;
   storageBytes: number;
   lastActivityAt: string | null;
@@ -62,6 +63,7 @@ export default function AdminWorkspacesPage() {
                 <p className="truncate font-mono text-xs text-muted-foreground">{w.slug}</p>
               </div>
               <div className="hidden shrink-0 items-center gap-2 sm:flex">
+                <span className={w.plan === 'FREE' ? 'pill-muted text-xs' : 'pill-gold text-xs'}>{w.plan}</span>
                 <span className="pill-muted text-xs">{w._count.members} members</span>
                 <span className="pill-muted text-xs">{w._count.projects} projects</span>
                 <span className="pill-muted text-xs">{formatBytes(w.storageBytes)}</span>

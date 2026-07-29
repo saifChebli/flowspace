@@ -234,6 +234,32 @@ export function dueReminderEmailTemplate(
   return baseLayout(`Task due soon: ${taskTitle}`, body);
 }
 
+export function quotaWarningEmailTemplate(
+  name: string,
+  workspaceName: string,
+  what: string,
+  detail: string,
+  atLimit: boolean,
+  appUrl: string,
+): string {
+  const body = `
+    <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">
+      ${atLimit ? `You've reached your ${what} limit` : `You're approaching your ${what} limit`}
+    </h1>
+    <p style="margin:0 0 4px;font-size:15px;line-height:24px;color:#3f3f46;">Hi ${name},</p>
+    <p style="margin:0;font-size:15px;line-height:24px;color:#3f3f46;">
+      Workspace <strong>${workspaceName}</strong> is using ${detail}.
+      ${atLimit
+        ? 'Your existing data is safe and nothing has been deleted — you just can\'t add more until you free up space or upgrade.'
+        : 'Nothing is blocked yet — this is just a heads-up.'}
+    </p>
+    ${ctaButton('View usage', appUrl)}
+    <p style="margin:0;font-size:13px;line-height:20px;color:#71717a;">
+      You're receiving this because you're an admin of this workspace.
+    </p>`;
+  return baseLayout(`${workspaceName}: ${what} ${atLimit ? 'limit reached' : 'limit approaching'}`, body);
+}
+
 export function magicLinkEmailTemplate(projectName: string, magicUrl: string): string {
   const body = `
     <h1 style="margin:0 0 8px;font-size:22px;font-weight:700;color:#18181b;">Your Portal Access</h1>

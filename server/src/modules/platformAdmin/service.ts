@@ -1,3 +1,4 @@
+import type { Plan } from '@prisma/client';
 import { prisma } from '../../lib/prisma';
 import { buildActivityCopy } from '../dashboard/service';
 import { AppError } from '../../middleware/errorHandler';
@@ -132,6 +133,19 @@ export async function getWorkspaceDetail(id: string) {
       };
     }),
   };
+}
+
+/** Manually grant/downgrade a plan — lets us comp early users before billing exists. */
+export async function setWorkspacePlan(id: string, plan: Plan, expiresAt?: string | null) {
+  if (!['FREE', 'PRO', 'AGENCY'].includes(plan)) throw new AppError(400, 'Invalid plan');
+  const workspace = await prisma.workspace.findUnique({ where: { id } });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+
+  await prisma.workspace.update({
+    where: { id },
+    data: { plan, planExpiresAt: expiresAt ? new Date(expiresAt) : null },
+  });
+  return { message: `Plan set to ${plan}` };
 }
 
 export async function deleteWorkspace(id: string) {

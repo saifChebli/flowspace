@@ -4,7 +4,17 @@ import { storageConfig } from '../../config/storage';
 import { generateUploadSignature } from '../../lib/cloudinary';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
+import { assertCanUpload } from '../plans/service';
 import type { PresignUploadInput, ConfirmUploadInput } from './schema';
+
+async function workspaceIdOf(projectId: string): Promise<string> {
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    select: { workspaceId: true },
+  });
+  if (!project) throw new AppError(404, 'Project not found');
+  return project.workspaceId;
+}
 
 /**
  * Return a Cloudinary signed-upload payload so the client can upload directly.
@@ -15,6 +25,9 @@ export async function presignUpload(projectId: string, userId: string, input: Pr
   if (!storageConfig.allowedMimeTypes.includes(input.mimeType as never)) {
     throw new AppError(415, 'Unsupported file type');
   }
+
+  // Reject before the user spends time uploading (confirm re-checks authoritatively).
+  await assertCanUpload(await workspaceIdOf(projectId), input.sizeBytes);
 
   const folder = `${storageConfig.cloudinary.folder}/projects/${projectId}`;
   const signatureData = generateUploadSignature(folder);
@@ -54,6 +67,9 @@ export async function confirmUpload(
   if (!input.publicId.startsWith(expectedPrefix)) {
     throw new AppError(400, 'Invalid upload reference');
   }
+
+  // Authoritative quota check — presign can be bypassed.
+  await assertCanUpload(await workspaceIdOf(projectId), input.sizeBytes);
 
   const file = await prisma.file.create({
     data: {

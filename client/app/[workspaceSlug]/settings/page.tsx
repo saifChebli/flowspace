@@ -1,12 +1,21 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import { toast } from 'sonner';
 import type { WorkspaceDetail, InviteToken } from '@/types';
+
+type Usage = {
+  plan: 'FREE' | 'PRO' | 'AGENCY';
+  planLabel: string;
+  planExpiresAt: string | null;
+  projects: { used: number; limit: number | null };
+  storage: { usedBytes: number; limitBytes: number };
+};
 
 type AuditItem = {
   id: string;
@@ -37,6 +46,11 @@ export default function WorkspaceSettingsPage() {
     queryKey: ['workspace-invites', workspaceSlug],
     queryFn: () => api.get(`/workspaces/${workspaceSlug}/invites`).then((r) => r.data),
     enabled: isAdmin,
+  });
+
+  const { data: usage } = useQuery<Usage>({
+    queryKey: ['workspace-usage', workspaceSlug],
+    queryFn: () => api.get(`/workspaces/${workspaceSlug}/usage`).then((r) => r.data),
   });
 
   const { data: activity } = useQuery<{ items: AuditItem[] }>({
@@ -314,6 +328,43 @@ export default function WorkspaceSettingsPage() {
         </div>
       </div>
 
+      {/* Plan & usage */}
+      {usage && (
+        <div className="soft-card rounded-xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="section-kicker">Plan &amp; usage</h3>
+            <span className={usage.plan === 'FREE' ? 'pill-muted' : 'pill-gold'}>{usage.planLabel}</span>
+          </div>
+          {usage.planExpiresAt && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Renews / expires {new Date(usage.planExpiresAt).toLocaleDateString()}
+            </p>
+          )}
+
+          <div className="mt-4 space-y-4">
+            <UsageBar
+              label="Active projects"
+              used={usage.projects.used}
+              limit={usage.projects.limit}
+              format={(n) => String(n)}
+            />
+            <UsageBar
+              label="Storage"
+              used={usage.storage.usedBytes}
+              limit={usage.storage.limitBytes}
+              format={formatBytes}
+            />
+          </div>
+
+          {usage.plan === 'FREE' && (
+            <p className="mt-4 text-xs text-muted-foreground">
+              Need more room? Paid plans lift the project limit and add storage.{' '}
+              <Link href="/#pricing" className="font-semibold text-accent hover:underline">See plans</Link>
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Export workspace data */}
       {isAdmin && (
         <div className="soft-card rounded-xl p-5">
@@ -378,4 +429,46 @@ export default function WorkspaceSettingsPage() {
       )}
     </div>
   );
+}
+
+function UsageBar({
+  label,
+  used,
+  limit,
+  format,
+}: {
+  label: string;
+  used: number;
+  limit: number | null;
+  format: (n: number) => string;
+}) {
+  const pct = limit === null ? 0 : Math.min(100, Math.round((used / limit) * 100));
+  const atLimit = limit !== null && used >= limit;
+  const near = pct >= 80 && !atLimit;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between text-sm">
+        <span className="font-medium">{label}</span>
+        <span className={atLimit ? "font-semibold text-destructive" : "text-muted-foreground"}>
+          {format(used)} {limit === null ? "· Unlimited" : `/ ${format(limit)}`}
+        </span>
+      </div>
+      {limit !== null && (
+        <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+          <div
+            className={`h-full rounded-full transition-all ${atLimit ? "bg-destructive" : near ? "bg-gold" : "bg-accent"}`}
+            style={{ width: `${Math.max(2, pct)}%` }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }

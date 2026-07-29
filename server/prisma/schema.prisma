@@ -55,6 +55,12 @@ enum FileStorage {
   CLOUDINARY
 }
 
+enum Plan {
+  FREE
+  PRO
+  AGENCY
+}
+
 // ─── User ─────────────────────────────────────────────────────────────────────
 
 model User {
@@ -105,14 +111,16 @@ model RefreshToken {
 // ─── Workspace ────────────────────────────────────────────────────────────────
 
 model Workspace {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  description String?
-  logoUrl     String?
-  ownerId     String? // workspace owner (creator); nullable for legacy rows
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id            String    @id @default(cuid())
+  name          String
+  slug          String    @unique
+  description   String?
+  logoUrl       String?
+  ownerId       String? // workspace owner (creator); nullable for legacy rows
+  plan          Plan      @default(FREE)
+  planExpiresAt DateTime? // null = no expiry (free, or manually granted)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
   members      WorkspaceMember[]
   projects     Project[]
