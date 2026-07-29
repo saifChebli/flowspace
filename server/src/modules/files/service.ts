@@ -1,7 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { storageConfig } from '../../config/storage';
-import { generateUploadSignature } from '../../lib/cloudinary';
+import { generateUploadSignature, getCloudinaryResource } from '../../lib/cloudinary';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
 import { assertCanUpload } from '../plans/service';
@@ -68,8 +68,13 @@ export async function confirmUpload(
     throw new AppError(400, 'Invalid upload reference');
   }
 
-  // Authoritative quota check — presign can be bypassed.
-  await assertCanUpload(await workspaceIdOf(projectId), input.sizeBytes);
+  // Never trust the client's `secureUrl`/`sizeBytes`: the URL was stored verbatim
+  // (so an arbitrary external link could be served to clients as a project file)
+  // and an under-reported size defeated the storage quota. Ask Cloudinary instead.
+  const asset = await getCloudinaryResource(input.publicId);
+  if (!asset) throw new AppError(400, 'Upload not found — please try again');
+
+  await assertCanUpload(await workspaceIdOf(projectId), asset.bytes);
 
   const file = await prisma.file.create({
     data: {
@@ -77,10 +82,10 @@ export async function confirmUpload(
       uploadedById: userId,
       name: sanitizeFileName(input.name),
       mimeType: input.mimeType,
-      sizeBytes: input.sizeBytes,
+      sizeBytes: asset.bytes,
       storage: 'CLOUDINARY',
       storageKey: input.publicId,
-      url: input.secureUrl,
+      url: asset.secureUrl,
     },
   });
 

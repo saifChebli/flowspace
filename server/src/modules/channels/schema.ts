@@ -10,9 +10,13 @@ export const createChannelSchema = z.object({
   description: z.string().max(300).optional(),
 });
 
-export const updateChannelSchema = createChannelSchema
-  .omit({ name: true })
-  .extend({ description: z.string().max(300).optional() });
+// `type` must be explicitly optional with NO default here. Inheriting the create
+// schema's `.default('PUBLIC')` meant a PATCH that only changed the description
+// silently converted PRIVATE channels to PUBLIC, exposing their whole history.
+export const updateChannelSchema = z.object({
+  type: z.enum(['PUBLIC', 'PRIVATE', 'CLIENT_VISIBLE']).optional(),
+  description: z.string().max(300).optional(),
+});
 
 export type CreateChannelInput = z.infer<typeof createChannelSchema>;
 export type UpdateChannelInput = z.infer<typeof updateChannelSchema>;

@@ -97,8 +97,19 @@ export async function refresh(input: RefreshInput) {
     throw new AppError(401, 'Refresh token revoked or expired');
   }
 
-  // Rotate: delete old, issue new
-  await prisma.refreshToken.delete({ where: { id: stored.id } });
+  // Re-check the account on every refresh — otherwise a suspended or unverified
+  // user keeps minting fresh access tokens for as long as they hold the cookie.
+  if (stored.user.suspendedAt) throw new AppError(403, 'This account has been suspended.');
+  if (!stored.user.emailVerified) throw new AppError(403, 'Email not verified');
+
+  // Rotate: delete old, issue new. Two tabs refreshing at once both pass the read
+  // above, so the loser's delete finds nothing (P2025) — that's a stale token, i.e.
+  // 401, not a 500.
+  try {
+    await prisma.refreshToken.delete({ where: { id: stored.id } });
+  } catch {
+    throw new AppError(401, 'Refresh token already used');
+  }
   return issueTokens(stored.user.id, stored.user.email);
 }
 

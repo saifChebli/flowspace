@@ -82,10 +82,9 @@ export async function acceptClientInvite(inviteToken: string) {
   if (!invite.projectId || invite.role !== 'CLIENT') {
     throw new AppError(400, 'This is not a client invite.');
   }
-  // Idempotent: re-clicking an already-accepted link (or a StrictMode double-call)
-  // should re-issue a session, not error. Only a never-accepted invite can expire.
-  const firstAccept = !invite.acceptedAt;
-  if (firstAccept && invite.expiresAt < new Date()) {
+  // Expiry always applies. (It used to be skipped once accepted, which turned a
+  // forwarded invite email into a permanent, un-revokable way back in.)
+  if (invite.expiresAt < new Date()) {
     throw new AppError(400, 'This invite link has expired. Ask your team to resend it.');
   }
 
@@ -96,6 +95,27 @@ export async function acceptClientInvite(inviteToken: string) {
   if (!project) throw new AppError(404, 'Project not found');
 
   const normalizedEmail = invite.email.toLowerCase().trim();
+  const firstAccept = !invite.acceptedAt;
+
+  // Replay is tolerated only briefly (double-click / StrictMode double-invoke) and
+  // only while access still stands. Anything else must go through the portal login,
+  // so replaying an old link can never resurrect revoked or removed access.
+  if (!firstAccept) {
+    const REPLAY_WINDOW_MS = 5 * 60 * 1000;
+    const withinWindow =
+      !!invite.acceptedAt && Date.now() - invite.acceptedAt.getTime() < REPLAY_WINDOW_MS;
+
+    const stillMember = await prisma.projectMember.findFirst({
+      where: { projectId: project.id, role: 'CLIENT', user: { email: normalizedEmail } },
+    });
+
+    if (!withinWindow || !stillMember || !project.clientPortalToken) {
+      throw new AppError(
+        403,
+        'This invite link has already been used. Open your portal link and request a new access email.',
+      );
+    }
+  }
 
   // Find or auto-provision a passwordless user for this client.
   let user = await prisma.user.findUnique({
@@ -121,6 +141,18 @@ export async function acceptClientInvite(inviteToken: string) {
 
   const sessionTokenValue = crypto.randomBytes(24).toString('base64url');
 
+  // Never downgrade an existing team member to CLIENT — a stray client invite to a
+  // teammate's address would otherwise strip their write access to their own project.
+  const existingMember = await prisma.projectMember.findUnique({
+    where: { projectId_userId: { projectId: project.id, userId } },
+  });
+  if (existingMember && existingMember.role !== 'CLIENT') {
+    throw new AppError(
+      409,
+      'That address already belongs to a team member on this project, so it cannot be added as a client.',
+    );
+  }
+
   const txOps: any[] = [
     prisma.projectMember.upsert({
       where: { projectId_userId: { projectId: project.id, userId } },
@@ -141,17 +173,9 @@ export async function acceptClientInvite(inviteToken: string) {
     );
   }
 
-  // Ensure workspace membership exists (clients need it to resolve the workspace layout).
-  const existingWsMember = await prisma.workspaceMember.findUnique({
-    where: { workspaceId_userId: { workspaceId: project.workspaceId, userId } },
-  });
-  if (!existingWsMember) {
-    txOps.push(
-      prisma.workspaceMember.create({
-        data: { workspaceId: project.workspaceId, userId, role: 'MEMBER' },
-      }),
-    );
-  }
+  // Deliberately NOT creating a WorkspaceMember row. Portal clients use the portal,
+  // not the team app shell — granting workspace membership exposed the whole member
+  // directory (names + emails) and let a client into the internal UI.
 
   await prisma.$transaction(txOps);
 
@@ -187,6 +211,16 @@ export async function setPortalPassword(userId: string, password: string) {
   if (!password || password.length < 8) {
     throw new AppError(400, 'Password must be at least 8 characters.');
   }
+
+  // This endpoint is for *upgrading a passwordless portal account*, so it must never
+  // overwrite an existing password — otherwise holding a portal session for an
+  // address that also has a real team account is a silent account takeover.
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { passwordHash: true } });
+  if (!user) throw new AppError(404, 'User not found');
+  if (user.passwordHash) {
+    throw new AppError(409, 'This account already has a password. Use “Forgot password” to change it.');
+  }
+
   const passwordHash = await bcrypt.hash(password, 12);
   await prisma.user.update({
     where: { id: userId },
@@ -207,19 +241,25 @@ export async function requestMagicLink(portalToken: string, email: string) {
   });
   if (!project) throw new AppError(404, 'Invalid portal link');
 
-  // Check that this email has CLIENT membership
+  // This endpoint is public, so every failure must look identical — distinct
+  // messages for "no such user" vs "not a client here" leaked account existence.
+  const NO_ACCESS = 'No client access to this project';
+
   const user = await prisma.user.findUnique({
     where: { email: normalizedEmail },
     select: { id: true },
   });
-  if (!user) throw new AppError(403, 'No access to this project');
+  if (!user) throw new AppError(403, NO_ACCESS);
 
   let member = await prisma.projectMember.findUnique({
     where: { projectId_userId: { projectId: project.id, userId: user.id } },
   });
 
+  // Existing team members must use the normal login, not a client portal link.
+  if (member && member.role !== 'CLIENT') throw new AppError(403, NO_ACCESS);
+
   // Auto-accept a pending CLIENT invite if the user hasn't formally accepted yet
-  if (!member || member.role !== 'CLIENT') {
+  if (!member) {
     const pendingInvite = await prisma.inviteToken.findFirst({
       where: {
         email: normalizedEmail,
@@ -240,18 +280,8 @@ export async function requestMagicLink(portalToken: string, email: string) {
         prisma.inviteToken.update({ where: { id: pendingInvite.id }, data: { acceptedAt: new Date() } }),
       ];
 
-      // Ensure workspace membership exists
-      const existingWsMember = await prisma.workspaceMember.findUnique({
-        where: { workspaceId_userId: { workspaceId: project.workspaceId, userId: user.id } },
-      });
-      if (!existingWsMember) {
-        txOps.push(
-          prisma.workspaceMember.create({
-            data: { workspaceId: project.workspaceId, userId: user.id, role: 'MEMBER' },
-          }),
-        );
-      }
-
+      // No WorkspaceMember row — see acceptClientInvite: portal clients must not
+      // get workspace membership or they can enter the team UI and member directory.
       await prisma.$transaction(txOps);
 
       member = await prisma.projectMember.findUnique({

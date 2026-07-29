@@ -32,10 +32,20 @@ export async function authenticatePortal(
   }
 
   try {
-    const session = await prisma.portalSession.findUnique({ where: { token } });
+    const session = await prisma.portalSession.findUnique({
+      where: { token },
+      include: { user: { select: { suspendedAt: true } } },
+    });
 
     if (!session || session.expiresAt < new Date()) {
       res.status(401).json({ error: 'Invalid or expired portal session' });
+      return;
+    }
+
+    // Suspension was only enforced at login, so a suspended portal user kept a
+    // sliding 90-day session indefinitely.
+    if (session.user.suspendedAt) {
+      res.status(403).json({ error: 'This account has been suspended.' });
       return;
     }
 
@@ -78,9 +88,9 @@ export async function authenticateAny(
       const payload = verifyAccessToken(authHeader.slice(7));
       const user = await prisma.user.findUnique({
         where: { id: payload.sub },
-        select: { id: true, email: true, name: true, emailVerified: true },
+        select: { id: true, email: true, name: true, emailVerified: true, suspendedAt: true },
       });
-      if (user && user.emailVerified) {
+      if (user && user.emailVerified && !user.suspendedAt) {
         req.user = { id: user.id, email: user.email, name: user.name };
         return next();
       }

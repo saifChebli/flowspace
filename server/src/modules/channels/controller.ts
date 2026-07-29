@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
+import { getActor } from '../../lib/actor';
 import { createChannelSchema, updateChannelSchema } from './schema';
 
 export async function create(req: Request, res: Response, next: NextFunction) {
@@ -11,9 +12,7 @@ export async function create(req: Request, res: Response, next: NextFunction) {
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    res.json(await svc.getChannels(req.params.projectId, userId));
+    res.json(await svc.getChannels(req.params.projectId, getActor(req)));
   } catch (err) { next(err); }
 }
 
@@ -32,9 +31,7 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
 
 export async function markRead(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    res.json(await svc.markChannelRead(req.params.channelId, userId));
+    res.json(await svc.markChannelRead(req.params.channelId, getActor(req)));
   } catch (err) { next(err); }
 }
 

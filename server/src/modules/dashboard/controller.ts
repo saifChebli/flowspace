@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
+import { getActor } from '../../lib/actor';
 
 export async function getDashboard(req: Request, res: Response, next: NextFunction) {
   try {
@@ -13,7 +14,9 @@ export async function getDashboard(req: Request, res: Response, next: NextFuncti
 export async function getActivity(req: Request, res: Response, next: NextFunction) {
   try {
     const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
-    const limit = typeof req.query.limit === 'string' ? Math.min(parseInt(req.query.limit, 10), 50) : 20;
+    // Guard against NaN — `parseInt('abc')` previously reached Prisma as `take: NaN` → 500.
+    const parsed = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : NaN;
+    const limit = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 1), 50) : 20;
     const result = await svc.getProjectActivity(req.params.projectId, req.user!.id, cursor, limit);
     res.json(result);
   } catch (err) {
@@ -23,9 +26,7 @@ export async function getActivity(req: Request, res: Response, next: NextFunctio
 
 export async function getClientPortal(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    const result = await svc.getClientPortal(req.params.projectId, userId);
+    const result = await svc.getClientPortal(req.params.projectId, getActor(req));
     res.json(result);
   } catch (err) {
     next(err);

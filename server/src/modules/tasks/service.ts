@@ -137,8 +137,18 @@ export async function moveTask(taskId: string, userId: string, input: MoveTaskIn
   await assertTeamMember(projectId, userId);
 
   // Resolve the destination list to auto-update status when appropriate.
-  const targetList = await prisma.boardList.findUnique({ where: { id: input.listId } });
+  const targetList = await prisma.boardList.findUnique({
+    where: { id: input.listId },
+    include: { board: true },
+  });
   if (!targetList) throw new AppError(404, 'Target list not found');
+
+  // The destination must be in the SAME project. Membership was only checked
+  // against the source, so without this a harvested list id moved a task onto
+  // another tenant's board.
+  if (targetList.board.projectId !== projectId) {
+    throw new AppError(403, 'Cannot move a task to another project');
+  }
 
   const derivedStatus = statusFromListName(targetList.name);
   const data: { listId: string; position: number; status?: TaskStatus; completedAt?: Date | null } = {

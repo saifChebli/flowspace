@@ -40,6 +40,24 @@ export function buildCloudinaryUrl(publicId: string, resourceType: string = 'aut
 }
 
 /**
+ * Look up an uploaded asset's real metadata. Used to verify a client-reported
+ * upload instead of trusting the size/URL it sends us. Returns null if absent.
+ */
+export async function getCloudinaryResource(
+  publicId: string,
+): Promise<{ bytes: number; format: string; secureUrl: string } | null> {
+  for (const resourceType of ['image', 'video', 'raw'] as const) {
+    try {
+      const res = await cloudinary.api.resource(publicId, { resource_type: resourceType });
+      return { bytes: res.bytes, format: res.format, secureUrl: res.secure_url };
+    } catch {
+      // Not this resource type — try the next.
+    }
+  }
+  return null;
+}
+
+/**
  * Delete an asset by its public_id.
  */
 export async function deleteCloudinaryAsset(publicId: string, resourceType: string = 'auto') {

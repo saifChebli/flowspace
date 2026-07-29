@@ -1,20 +1,13 @@
 import { prisma } from '../../lib/prisma';
-import { AppError } from '../../middleware/errorHandler';
-
-async function assertProjectMember(projectId: string, userId: string) {
-  const m = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId } },
-  });
-  if (!m) throw new AppError(403, 'Not a project member');
-  return m;
-}
+import { resolveProjectAccess, type Actor } from '../../lib/actor';
 
 // ponytail: ILIKE `contains`, no index — swap to Postgres tsvector + GIN when slow.
-export async function searchProject(projectId: string, userId: string, q: string) {
+export async function searchProject(projectId: string, actor: Actor, q: string) {
   const query = q.trim();
   if (query.length < 2) return { messages: [], tasks: [], files: [] };
 
-  const member = await assertProjectMember(projectId, userId);
+  const member = await resolveProjectAccess(projectId, actor);
+  const userId = actor.userId;
 
   // Same channel-visibility rule as messages/service: clients see CLIENT_VISIBLE
   // only; team members see everything except PRIVATE channels they're not in.

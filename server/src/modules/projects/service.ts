@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma';
+import { newInviteToken } from '../../lib/tokens';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import type { CreateProjectInput, UpdateProjectInput, InviteProjectMemberInput, UpdateProjectMemberRoleInput } from './schema';
@@ -98,6 +99,9 @@ export async function getArchivedProjects(workspaceSlug: string, userId: string)
     where: {
       workspaceId: workspace.id,
       archived: true,
+      // Same membership filter as getProjects — without it any workspace member
+      // could enumerate every archived project, including ones they were never on.
+      members: { some: { userId } },
     },
     include: { _count: { select: { members: true } } },
     orderBy: { createdAt: 'desc' },
@@ -121,7 +125,7 @@ export async function getProject(projectId: string, userId: string) {
 export async function updateProject(projectId: string, userId: string, input: UpdateProjectInput) {
   const project = await prisma.project.findUnique({ where: { id: projectId }, include: { members: true } });
   if (!project) throw new AppError(404, 'Project not found');
-  assertProjectMember(project.members, userId);
+  assertProjectTeamMember(project.members, userId);
 
   return prisma.project.update({ where: { id: projectId }, data: input });
 }
@@ -177,6 +181,12 @@ export async function removeProjectMember(projectId: string, actorId: string, me
   const target = project.members.find((m) => m.userId === memberId);
   if (!target) throw new AppError(404, 'Member not found in project');
 
+  assertCanManageTarget(project, isWsAdmin, target.userId);
+  // Removing the last non-client would leave the project unmanageable from inside.
+  if (target.role !== 'CLIENT' && countTeamMembers(project.members) <= 1) {
+    throw new AppError(400, 'Cannot remove the last team member of a project');
+  }
+
   await prisma.projectMember.delete({
     where: { projectId_userId: { projectId, userId: memberId } },
   });
@@ -197,6 +207,12 @@ export async function updateProjectMemberRole(projectId: string, actorId: string
 
   const target = project.members.find((m) => m.userId === memberId);
   if (!target) throw new AppError(404, 'Member not found in project');
+
+  assertCanManageTarget(project, isWsAdmin, target.userId);
+  // Demoting the last team member to CLIENT would leave nobody able to manage it.
+  if (target.role !== 'CLIENT' && input.role === 'CLIENT' && countTeamMembers(project.members) <= 1) {
+    throw new AppError(400, 'Cannot demote the last team member of a project');
+  }
 
   await prisma.projectMember.update({
     where: { projectId_userId: { projectId, userId: memberId } },
@@ -227,6 +243,7 @@ export async function inviteProjectMember(projectId: string, inviterId: string, 
 
   const invite = await prisma.inviteToken.create({
     data: {
+      token: newInviteToken(),
       email: input.email,
       projectId,
       role: input.role,
@@ -359,4 +376,31 @@ function assertWorkspaceMember(members: { userId: string }[], userId: string) {
 
 export function assertProjectMember(members: { userId: string; role: string }[], userId: string) {
   if (!members.some((m) => m.userId === userId)) throw new AppError(403, 'Not a project member');
+}
+
+function countTeamMembers(members: { role: string }[]): number {
+  return members.filter((m) => m.role !== 'CLIENT').length;
+}
+
+/**
+ * A plain project member must not be able to remove or demote a workspace admin —
+ * otherwise they can lock the people responsible for the workspace out of a project.
+ */
+function assertCanManageTarget(
+  project: { workspace: { members: { userId: string; role: string }[] } },
+  actorIsWorkspaceAdmin: boolean,
+  targetUserId: string,
+) {
+  if (actorIsWorkspaceAdmin) return;
+  if (isWorkspaceAdmin(project.workspace.members, targetUserId)) {
+    throw new AppError(403, 'Only a workspace admin can change another admin’s project access');
+  }
+}
+
+/** Project member excluding clients — for anything that mutates project data. */
+function assertProjectTeamMember(members: { userId: string; role: string }[], userId: string) {
+  const member = members.find((m) => m.userId === userId);
+  if (!member) throw new AppError(403, 'Not a project member');
+  if (member.role === 'CLIENT') throw new AppError(403, 'Clients cannot modify this project');
+  return member;
 }

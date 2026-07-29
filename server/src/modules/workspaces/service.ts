@@ -4,6 +4,7 @@ import { sendEmail, inviteEmailTemplate } from '../../lib/email';
 import { buildActivityCopy } from '../dashboard/service';
 import { toCsv } from '../../lib/csv';
 import { getWorkspaceUsage } from '../plans/service';
+import { newInviteToken } from '../../lib/tokens';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import { env } from '../../config/env';
@@ -108,6 +109,7 @@ export async function inviteMember(slug: string, inviterId: string, input: Invit
 
   const invite = await prisma.inviteToken.create({
     data: {
+      token: newInviteToken(),
       email: input.email,
       workspaceId: workspace.id,
       role: input.role,
@@ -178,9 +180,23 @@ export async function removeMember(slug: string, adminId: string, memberId: stri
   assertAdmin(workspace.members, adminId);
   if (adminId === memberId) throw new AppError(400, 'Cannot remove yourself');
 
-  await prisma.workspaceMember.delete({
-    where: { workspaceId_userId: { workspaceId: workspace.id, userId: memberId } },
-  });
+  const target = workspace.members.find((m) => m.userId === memberId);
+  if (!target) throw new AppError(404, 'Member not found in workspace');
+
+  // Project access authorizes on ProjectMember alone, so deleting only the
+  // workspace row left a removed contractor with full access to every project,
+  // channel and file. Revoke everything in one transaction.
+  await prisma.$transaction([
+    prisma.workspaceMember.delete({
+      where: { workspaceId_userId: { workspaceId: workspace.id, userId: memberId } },
+    }),
+    prisma.projectMember.deleteMany({
+      where: { userId: memberId, project: { workspaceId: workspace.id } },
+    }),
+    prisma.portalSession.deleteMany({
+      where: { userId: memberId, project: { workspaceId: workspace.id } },
+    }),
+  ]);
 
   return { message: 'Member removed' };
 }

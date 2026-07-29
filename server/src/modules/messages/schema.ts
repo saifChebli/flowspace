@@ -13,7 +13,9 @@ export const editMessageSchema = z.object({
 
 export const listMessagesSchema = z.object({
   cursor: z.string().optional(),
-  limit: z.string().default('50').transform(Number),
+  // Bounded and NaN-safe: `?limit=abc` used to reach Prisma as `take: NaN` (500),
+  // and a huge value fetched the whole channel with its include fan-out.
+  limit: z.coerce.number().int().min(1).max(100).default(50),
 });
 
 export type SendMessageInput = z.infer<typeof sendMessageSchema>;

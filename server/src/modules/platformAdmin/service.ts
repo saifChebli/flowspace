@@ -181,6 +181,9 @@ export async function suspendUser(id: string) {
   await prisma.$transaction([
     prisma.user.update({ where: { id }, data: { suspendedAt: new Date() } }),
     prisma.refreshToken.deleteMany({ where: { userId: id } }),
+    // Portal sessions are separate credentials with a 90-day sliding expiry, so
+    // suspension has to revoke them too.
+    prisma.portalSession.deleteMany({ where: { userId: id } }),
   ]);
   return { message: 'User suspended' };
 }

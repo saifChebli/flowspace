@@ -33,11 +33,16 @@ export async function authenticate(
 
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, email: true, name: true, emailVerified: true },
+      select: { id: true, email: true, name: true, emailVerified: true, suspendedAt: true },
     });
 
     if (!user) {
       res.status(401).json({ error: 'User not found' });
+      return;
+    }
+
+    if (user.suspendedAt) {
+      res.status(403).json({ error: 'This account has been suspended.' });
       return;
     }
 

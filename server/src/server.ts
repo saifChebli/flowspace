@@ -34,10 +34,13 @@ io.use(async (socket, next) => {
     const payload = verifyAccessToken(token);
     const user = await prisma.user.findUnique({
       where: { id: payload.sub },
-      select: { id: true, name: true, email: true },
+      select: { id: true, name: true, email: true, emailVerified: true, suspendedAt: true },
     });
 
     if (!user) return next(new Error('User not found'));
+    // Mirror the HTTP middleware — sockets previously checked neither flag.
+    if (user.suspendedAt) return next(new Error('Account suspended'));
+    if (!user.emailVerified) return next(new Error('Email not verified'));
 
     // Attach user to socket data
     socket.data.user = user;

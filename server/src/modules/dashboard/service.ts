@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { getPortalBranding } from '../portal/service';
+import { resolveProjectAccess, type Actor } from '../../lib/actor';
 import { AppError } from '../../middleware/errorHandler';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -228,8 +229,8 @@ export function buildActivityCopy(type: string, meta: Record<string, any>): { ti
 
 // ── Client portal view ──────────────────────────────────────────────────────
 
-export async function getClientPortal(projectId: string, userId: string) {
-  const member = await assertProjectMember(projectId, userId);
+export async function getClientPortal(projectId: string, actor: Actor) {
+  const member = await resolveProjectAccess(projectId, actor);
 
   // Always filter to client-visible data, regardless of role
   const [project, channels, recentMessages, files, lanes] = await Promise.all([
@@ -247,7 +248,7 @@ export async function getClientPortal(projectId: string, userId: string) {
         name: true,
         description: true,
         createdAt: true,
-        _count: { select: { messages: true } },
+        _count: { select: { messages: { where: { deletedAt: null, parentId: null } } } },
       },
     }),
 
@@ -292,7 +293,7 @@ export async function getClientPortal(projectId: string, userId: string) {
       select: {
         id: true,
         name: true,
-        _count: { select: { tasks: true } },
+        _count: { select: { tasks: { where: { deletedAt: null } } } },
       },
     }),
   ]);

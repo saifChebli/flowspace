@@ -2,29 +2,43 @@ import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
+import { assertChannelAccess, type Actor } from '../../lib/actor';
 import type { SendMessageInput, EditMessageInput } from './schema';
 
-export async function sendMessage(channelId: string, authorId: string, input: SendMessageInput) {
-  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  if (!channel) throw new AppError(404, 'Channel not found');
+export async function sendMessage(channelId: string, actor: Actor, input: SendMessageInput) {
+  const { channel } = await assertChannelAccess(channelId, actor);
+  const authorId = actor.userId;
 
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId: channel.projectId, userId: authorId } },
-  });
-  if (!member) throw new AppError(403, 'Not a project member');
-
-  // Clients can only post in CLIENT_VISIBLE channels
-  if (member.role === 'CLIENT' && channel.type !== 'CLIENT_VISIBLE') {
-    throw new AppError(403, 'Clients can only post in client-visible channels');
-  }
-
-  // Private channels: must be a channel member
-  if (channel.type === 'PRIVATE') {
-    const channelMember = await prisma.channelMember.findUnique({
-      where: { channelId_userId: { channelId, userId: authorId } },
+  // Everything below is client-supplied and must be constrained to this channel /
+  // project — otherwise attachments leak other tenants' file URLs, replies can be
+  // grafted into unreadable channels, and mentions can notify arbitrary users.
+  const fileIds = [...new Set(input.fileIds ?? [])];
+  if (fileIds.length > 0) {
+    const owned = await prisma.file.count({
+      where: { id: { in: fileIds }, projectId: channel.projectId },
     });
-    if (!channelMember) throw new AppError(403, 'Not a member of this private channel');
+    if (owned !== fileIds.length) throw new AppError(400, 'Unknown attachment');
   }
+
+  if (input.parentId) {
+    const parent = await prisma.message.findUnique({
+      where: { id: input.parentId },
+      select: { channelId: true, deletedAt: true },
+    });
+    if (!parent || parent.channelId !== channelId || parent.deletedAt) {
+      throw new AppError(400, 'Cannot reply to that message');
+    }
+  }
+
+  const mentionedUserIds = [...new Set(input.mentionedUserIds ?? [])];
+  const validMentions = mentionedUserIds.length
+    ? (
+        await prisma.projectMember.findMany({
+          where: { projectId: channel.projectId, userId: { in: mentionedUserIds } },
+          select: { userId: true },
+        })
+      ).map((m) => m.userId)
+    : [];
 
   const message = await prisma.message.create({
     data: {
@@ -32,11 +46,11 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
       authorId,
       body: input.body,
       parentId: input.parentId ?? null,
-      mentions: input.mentionedUserIds?.length
-        ? { createMany: { data: input.mentionedUserIds.map((userId) => ({ userId })) } }
+      mentions: validMentions.length
+        ? { createMany: { data: validMentions.map((userId) => ({ userId })) } }
         : undefined,
-      attachments: input.fileIds?.length
-        ? { createMany: { data: input.fileIds.map((fileId) => ({ fileId })) } }
+      attachments: fileIds.length
+        ? { createMany: { data: fileIds.map((fileId) => ({ fileId })) } }
         : undefined,
     },
     include: {
@@ -47,7 +61,7 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
   });
 
   // Create mention notifications (exclude self-mentions)
-  const mentionRecipients = input.mentionedUserIds?.filter((uid) => uid !== authorId) ?? [];
+  const mentionRecipients = validMentions.filter((uid) => uid !== authorId);
   if (mentionRecipients.length > 0) {
     await prisma.notification.createMany({
       data: mentionRecipients.map((userId) => ({
@@ -79,28 +93,11 @@ export async function sendMessage(channelId: string, authorId: string, input: Se
 
 export async function listMessages(
   channelId: string,
-  userId: string,
+  actor: Actor,
   cursor?: string,
   limit = 50
 ) {
-  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  if (!channel) throw new AppError(404, 'Channel not found');
-
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId: channel.projectId, userId } },
-  });
-  if (!member) throw new AppError(403, 'Not a project member');
-  if (member.role === 'CLIENT' && channel.type !== 'CLIENT_VISIBLE') {
-    throw new AppError(403, 'Access denied');
-  }
-
-  // Private channels: must be a channel member
-  if (channel.type === 'PRIVATE') {
-    const channelMember = await prisma.channelMember.findUnique({
-      where: { channelId_userId: { channelId, userId } },
-    });
-    if (!channelMember) throw new AppError(403, 'Not a member of this private channel');
-  }
+  await assertChannelAccess(channelId, actor);
 
   const messages = await prisma.message.findMany({
     where: { channelId, deletedAt: null, parentId: null },
@@ -131,18 +128,17 @@ export async function editMessage(messageId: string, userId: string, input: Edit
   });
 }
 
-export async function listThreadReplies(parentId: string, userId: string) {
+export async function listThreadReplies(parentId: string, actor: Actor) {
   const parent = await prisma.message.findUnique({
     where: { id: parentId },
     include: { channel: true },
   });
   if (!parent) throw new AppError(404, 'Message not found');
 
-  // Verify access
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId: parent.channel.projectId, userId } },
-  });
-  if (!member) throw new AppError(403, 'Not a project member');
+  // Same visibility rule as reading the channel itself — this previously only
+  // checked project membership, so clients and non-members of a PRIVATE channel
+  // could read its messages through the thread endpoint.
+  await assertChannelAccess(parent.channelId, actor);
 
   const replies = await prisma.message.findMany({
     where: { parentId, deletedAt: null },

@@ -1,22 +1,19 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
+import { getActor } from '../../lib/actor';
 import { sendMessageSchema, editMessageSchema, listMessagesSchema } from './schema';
 
 export async function send(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const input = sendMessageSchema.parse(req.body);
-    res.status(201).json(await svc.sendMessage(req.params.channelId, userId, input));
+    res.status(201).json(await svc.sendMessage(req.params.channelId, getActor(req), input));
   } catch (err) { next(err); }
 }
 
 export async function list(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
     const { cursor, limit } = listMessagesSchema.parse(req.query);
-    res.json(await svc.listMessages(req.params.channelId, userId, cursor, limit));
+    res.json(await svc.listMessages(req.params.channelId, getActor(req), cursor, limit));
   } catch (err) { next(err); }
 }
 
@@ -35,8 +32,6 @@ export async function remove(req: Request, res: Response, next: NextFunction) {
 
 export async function listThread(req: Request, res: Response, next: NextFunction) {
   try {
-    const userId = req.user?.id ?? req.portalUser?.userId;
-    if (!userId) return res.status(401).json({ error: 'Unauthorized' });
-    res.json(await svc.listThreadReplies(req.params.messageId, userId));
+    res.json(await svc.listThreadReplies(req.params.messageId, getActor(req)));
   } catch (err) { next(err); }
 }

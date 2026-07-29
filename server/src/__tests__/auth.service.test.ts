@@ -212,7 +212,7 @@ describe('refresh()', () => {
     mockRefreshToken.findUnique.mockResolvedValue({
       id: 'rt1',
       expiresAt: new Date(Date.now() + 86400000),
-      user: { id: 'u1', email: 'u@e.com' },
+      user: { id: 'u1', email: 'u@e.com', emailVerified: true, suspendedAt: null },
     });
     mockRefreshToken.delete.mockResolvedValue({});
     mockRefreshToken.create.mockResolvedValue({});
@@ -221,6 +221,34 @@ describe('refresh()', () => {
 
     expect(mockRefreshToken.delete).toHaveBeenCalledWith({ where: { id: 'rt1' } });
     expect(mockRefreshToken.create).toHaveBeenCalled();
+  });
+
+  it('refuses to refresh a suspended account', async () => {
+    const { verifyRefreshToken } = await import('../lib/jwt');
+    (verifyRefreshToken as jest.Mock).mockReturnValue({ sub: 'u1', jti: 'jti1' });
+
+    mockRefreshToken.findUnique.mockResolvedValue({
+      id: 'rt1',
+      expiresAt: new Date(Date.now() + 86400000),
+      user: { id: 'u1', email: 'u@e.com', emailVerified: true, suspendedAt: new Date() },
+    });
+
+    await expect(authService.refresh({ refreshToken: 'old-token' })).rejects.toMatchObject({ statusCode: 403 });
+    expect(mockRefreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('returns 401 (not 500) when a concurrent refresh already consumed the token', async () => {
+    const { verifyRefreshToken } = await import('../lib/jwt');
+    (verifyRefreshToken as jest.Mock).mockReturnValue({ sub: 'u1', jti: 'jti1' });
+
+    mockRefreshToken.findUnique.mockResolvedValue({
+      id: 'rt1',
+      expiresAt: new Date(Date.now() + 86400000),
+      user: { id: 'u1', email: 'u@e.com', emailVerified: true, suspendedAt: null },
+    });
+    mockRefreshToken.delete.mockRejectedValue(new Error('P2025: record not found'));
+
+    await expect(authService.refresh({ refreshToken: 'old-token' })).rejects.toMatchObject({ statusCode: 401 });
   });
 
   it('rejects when stored token is expired', async () => {

@@ -1,5 +1,6 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
+import { assertChannelAccess, resolveProjectAccess, type Actor } from '../../lib/actor';
 import type { CreateChannelInput, UpdateChannelInput } from './schema';
 
 export async function createChannel(projectId: string, userId: string, input: CreateChannelInput) {
@@ -25,13 +26,10 @@ export async function createChannel(projectId: string, userId: string, input: Cr
   return channel;
 }
 
-export async function getChannels(projectId: string, userId: string) {
-  const member = await prisma.projectMember.findUnique({
-    where: { projectId_userId: { projectId, userId } },
-  });
-  if (!member) throw new AppError(403, 'Not a project member');
-
-  const isClient = member.role === 'CLIENT';
+export async function getChannels(projectId: string, actor: Actor) {
+  const access = await resolveProjectAccess(projectId, actor);
+  const userId = actor.userId;
+  const isClient = access.role === 'CLIENT';
 
   const channels = await prisma.channel.findMany({
     where: {
@@ -78,13 +76,21 @@ export async function updateChannel(channelId: string, userId: string, input: Up
   const member = await assertProjectMember(channel.projectId, userId);
   if (member.role === 'CLIENT') throw new AppError(403, 'Clients cannot modify channels');
 
+  // Changing a PRIVATE channel's type exposes its history, so require membership
+  // of that channel — being any team member of the project isn't enough.
+  if (input.type && input.type !== channel.type && channel.type === 'PRIVATE') {
+    const channelMember = await prisma.channelMember.findUnique({
+      where: { channelId_userId: { channelId, userId } },
+    });
+    if (!channelMember) throw new AppError(403, 'Not a member of this private channel');
+  }
+
   return prisma.channel.update({ where: { id: channelId }, data: input });
 }
 
-export async function markChannelRead(channelId: string, userId: string) {
-  const channel = await prisma.channel.findUnique({ where: { id: channelId } });
-  if (!channel) throw new AppError(404, 'Channel not found');
-  await assertProjectMember(channel.projectId, userId);
+export async function markChannelRead(channelId: string, actor: Actor) {
+  await assertChannelAccess(channelId, actor);
+  const userId = actor.userId;
 
   return prisma.channelRead.upsert({
     where: { channelId_userId: { channelId, userId } },
