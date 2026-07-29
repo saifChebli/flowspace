@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, LogOut, Plus, FolderKanban, Archive, Settings, ChevronDown, ChevronRight, RotateCcw } from 'lucide-react';
+import { ArrowLeft, LogOut, Plus, FolderKanban, Archive, Settings, ChevronDown, ChevronRight, RotateCcw, TrendingUp } from 'lucide-react';
 import api from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
 import CreateProjectModal from '@/components/projects/CreateProjectModal';
@@ -184,9 +184,16 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         </div>
         )}
 
-        {/* Bottom settings link */}
+        {/* Bottom links */}
         {!isClientOnly && (
-        <div className="mx-3 mt-auto mb-3">
+        <div className="mx-3 mt-auto mb-3 space-y-2">
+          <Link
+            href={`/${workspaceSlug}/analytics`}
+            className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/50 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/80 hover:text-foreground"
+          >
+            <TrendingUp className="h-4 w-4" />
+            Analytics
+          </Link>
           <Link
             href={`/${workspaceSlug}/settings`}
             className="flex items-center gap-2 rounded-lg border border-border/60 bg-white/50 px-3 py-2.5 text-sm font-medium text-muted-foreground transition-colors hover:bg-white/80 hover:text-foreground"

@@ -24,6 +24,7 @@ import portalRouter from './modules/portal/router';
 import searchRouter from './modules/search/router';
 import platformAdminRouter from './modules/platformAdmin/router';
 import publicRouter from './modules/public/router';
+import analyticsRouter from './modules/analytics/router';
 
 export function createApp() {
   const app = express();
@@ -65,6 +66,7 @@ export function createApp() {
   // ─── API routes ───────────────────────────────────────────────────────────
   app.use('/api/auth', authRouter);
   app.use('/api/workspaces', workspacesRouter);
+  app.use('/api/workspaces/:slug/analytics', analyticsRouter);
   app.use('/api/workspaces/:workspaceSlug/projects', projectsRouter);
   app.use('/api/projects/:projectId/channels', channelsRouter);
   app.use('/api/channels/:channelId/messages', messagesRouter);
