@@ -921,7 +921,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Can I migrate from Trello / Slack?',
-    a: 'Importers for Trello (CSV) and Slack message history are on our roadmap and not available yet — today, migration means creating your projects and boards in CollabSpace directly. Most teams run CollabSpace alongside their current tools for a week or two while they switch over. You can always export everything back out.',
+    a: 'For Trello, export your board as CSV and upload it in project settings — each list becomes a board list and each card becomes a task, with labels and due dates preserved. A Slack message-history importer is still on our roadmap. Most teams run CollabSpace alongside their current tools for a week or two while they switch over, and you can always export everything back out.',
   },
   {
     q: 'What happens if I exceed the Free plan limits?',

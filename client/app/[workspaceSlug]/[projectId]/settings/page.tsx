@@ -32,6 +32,30 @@ export default function ProjectSettingsPage() {
   const [inviteRole, setInviteRole] = useState<'MEMBER' | 'CLIENT'>('MEMBER');
   const [inviteMsg, setInviteMsg] = useState('');
 
+  // ─── Trello import ────────────────────────────────────────────────────
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [importing, setImporting] = useState(false);
+
+  async function runImport() {
+    if (!csvFile) return;
+    setImporting(true);
+    try {
+      const csv = await csvFile.text();
+      const { data } = await api.post(
+        `/workspaces/${workspaceSlug}/projects/${projectId}/import/trello`,
+        { csv, boardName: `Imported from Trello — ${csvFile.name.replace(/\.csv$/i, '')}` },
+      );
+      toast.success(`Imported ${data.tasksCreated} cards into ${data.listsCreated} lists`);
+      setCsvFile(null);
+      queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
+    } catch (err) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Import failed';
+      toast.error(msg);
+    } finally {
+      setImporting(false);
+    }
+  }
+
   const { data: project, isLoading } = useQuery<ProjectDetail>({
     queryKey: ['project-settings', workspaceSlug, projectId],
     queryFn: () =>
@@ -462,6 +486,31 @@ export default function ProjectSettingsPage() {
           )}
         </div>
       )}
+
+      {/* Import from Trello */}
+      <div className="soft-card rounded-xl p-5">
+        <h3 className="section-kicker">Import from Trello</h3>
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          Export a Trello board as CSV, then upload it here. Each Trello list becomes a board list,
+          and each card becomes a task with its labels and due date. Cards in a &ldquo;Done&rdquo; list
+          are imported as completed.
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          <input
+            type="file"
+            accept=".csv,text/csv"
+            onChange={(e) => setCsvFile(e.target.files?.[0] ?? null)}
+            className="text-sm file:mr-3 file:rounded-lg file:border file:border-border/60 file:bg-white/60 file:px-3 file:py-1.5 file:text-xs file:font-medium"
+          />
+          <button
+            onClick={runImport}
+            disabled={!csvFile || importing}
+            className="secondary-button px-4 py-2 text-sm disabled:opacity-50"
+          >
+            {importing ? 'Importing…' : 'Import board'}
+          </button>
+        </div>
+      </div>
 
       {/* Danger zone — archive / unarchive */}
       {isWsAdmin && (

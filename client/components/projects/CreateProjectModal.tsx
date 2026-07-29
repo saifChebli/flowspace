@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
 import Modal from '@/components/ui/Modal';
 import { toast } from 'sonner';
@@ -13,17 +13,28 @@ interface Props {
   workspaceSlug: string;
 }
 
+type Template = { id: string; label: string; description: string };
+
 export default function CreateProjectModal({ open, onClose, workspaceSlug }: Props) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [template, setTemplate] = useState('client');
   const [error, setError] = useState('');
   const queryClient = useQueryClient();
+
+  const { data: templates } = useQuery<Template[]>({
+    queryKey: ['project-templates'],
+    queryFn: () => api.get(`/workspaces/${workspaceSlug}/projects/templates`).then((r) => r.data),
+    enabled: open,
+    staleTime: Infinity,
+  });
 
   const { mutate, isPending } = useMutation({
     mutationFn: () =>
       api.post<Project>(`/workspaces/${workspaceSlug}/projects`, {
         name,
         description: description || undefined,
+        template,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['projects', workspaceSlug] });
@@ -83,6 +94,29 @@ export default function CreateProjectModal({ open, onClose, workspaceSlug }: Pro
             className="field-input resize-none"
           />
         </div>
+        {templates && templates.length > 0 && (
+          <div>
+            <label className="form-label">Start from</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              {templates.map((t) => (
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setTemplate(t.id)}
+                  className={`rounded-lg border px-3 py-2.5 text-left transition-all ${
+                    template === t.id
+                      ? 'border-accent/40 bg-accent-soft shadow-sm'
+                      : 'border-border/60 bg-white/50 hover:border-border'
+                  }`}
+                >
+                  <p className={`text-sm font-semibold ${template === t.id ? 'text-accent' : ''}`}>{t.label}</p>
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{t.description}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className="flex justify-end gap-3 pt-1">
           <button
             type="button"

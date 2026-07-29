@@ -1,12 +1,31 @@
 import { Request, Response, NextFunction } from 'express';
 import * as svc from './service';
 import { createProjectSchema, updateProjectSchema, inviteProjectMemberSchema, updateProjectMemberRoleSchema } from './schema';
+import { templateList } from './templates';
+import { importTrelloCsv } from '../import/service';
 
 export async function create(req: Request, res: Response, next: NextFunction) {
   try {
     const input = createProjectSchema.parse(req.body);
     const result = await svc.createProject(req.params.workspaceSlug, req.user!.id, input);
     res.status(201).json(result);
+  } catch (err) { next(err); }
+}
+
+export function listTemplates(_req: Request, res: Response) {
+  res.json(templateList);
+}
+
+export async function importTrello(req: Request, res: Response, next: NextFunction) {
+  try {
+    const { csv, boardName } = req.body ?? {};
+    if (typeof csv !== 'string' || csv.trim().length === 0) {
+      return res.status(400).json({ error: 'csv content is required' });
+    }
+    if (csv.length > 5 * 1024 * 1024) {
+      return res.status(413).json({ error: 'That file is too large (5 MB max).' });
+    }
+    res.json(await importTrelloCsv(req.params.projectId, req.user!.id, csv, boardName));
   } catch (err) { next(err); }
 }
 

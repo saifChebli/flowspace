@@ -9,6 +9,8 @@ router.use(authenticate);
 // /api/workspaces/:workspaceSlug/projects
 router.get('/', ctrl.list);
 router.get('/archived', ctrl.listArchived);
+router.get('/templates', ctrl.listTemplates);
+router.post('/:projectId/import/trello', ctrl.importTrello);
 router.post('/', ctrl.create);
 router.get('/:projectId', ctrl.getOne);
 router.patch('/:projectId', ctrl.update);

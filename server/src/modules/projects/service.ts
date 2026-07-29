@@ -6,6 +6,7 @@ import { sendEmail, inviteEmailTemplate, clientInviteEmailTemplate } from '../..
 import { env } from '../../config/env';
 import { logActivity } from '../../events/activity';
 import { assertCanCreateProject } from '../plans/service';
+import { PROJECT_TEMPLATES } from './templates';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -37,13 +38,33 @@ export async function createProject(workspaceSlug: string, userId: string, input
 
   await assertCanCreateProject(workspace.id);
 
-  return prisma.project.create({
+  const { template = 'client', ...projectData } = input;
+  const tpl = PROJECT_TEMPLATES[template] ?? PROJECT_TEMPLATES.client;
+
+  const project = await prisma.project.create({
     data: {
       workspaceId: workspace.id,
-      ...input,
+      ...projectData,
       members: { create: { userId, role: 'MEMBER' } },
     },
   });
+
+  // Scaffold channels + board so a new project is usable immediately
+  // (the landing page promises these are created automatically).
+  if (tpl.channels.length > 0) {
+    await prisma.channel.createMany({
+      data: tpl.channels.map((c) => ({ projectId: project.id, name: c.name, type: c.type })),
+      skipDuplicates: true,
+    });
+  }
+  if (tpl.lists.length > 0) {
+    const board = await prisma.board.create({ data: { projectId: project.id, name: 'Main Board' } });
+    await prisma.boardList.createMany({
+      data: tpl.lists.map((name, position) => ({ boardId: board.id, name, position })),
+    });
+  }
+
+  return project;
 }
 
 export async function getProjects(workspaceSlug: string, userId: string) {
