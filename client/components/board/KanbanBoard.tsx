@@ -88,9 +88,19 @@ export default function KanbanBoard({ board, projectId, readOnly = false }: Kanb
     };
   }, [projectId, joinProject, leaveProject, on, queryClient]);
 
+  // ─── Filter state (declared before sensors — drag depends on it) ──────
+  const [fAssignee, setFAssignee] = useState('');
+  const [fPriority, setFPriority] = useState('');
+  const [fLabel, setFLabel] = useState('');
+  const [fDue, setFDue] = useState('');
+  const [fText, setFText] = useState('');
+  const filtersActive = !!(fAssignee || fPriority || fLabel || fDue || fText);
+
   // ─── DnD sensors ──────────────────────────────────────────────────────
+  // Filtering hides cards, so visible order no longer matches stored positions —
+  // disable dragging until filters are cleared rather than persist a wrong index.
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: readOnly ? Infinity : 5 } })
+    useSensor(PointerSensor, { activationConstraint: { distance: readOnly || filtersActive ? Infinity : 5 } })
   );
 
   // Build a flat map of taskId → task for quick lookup
@@ -101,6 +111,57 @@ export default function KanbanBoard({ board, projectId, readOnly = false }: Kanb
     }
     return map;
   }, [board.lists]);
+
+  // ─── Filters (Pro) ───────────────────────────────────────────────────
+  const { data: usage } = useQuery<{ plan: 'FREE' | 'PRO' | 'AGENCY' }>({
+    queryKey: ['workspace-usage', workspaceSlug],
+    queryFn: () => api.get(`/workspaces/${workspaceSlug}/usage`).then((r) => r.data),
+  });
+  const canFilter = usage ? usage.plan !== 'FREE' : false;
+
+  const allLabels = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of board.lists) for (const t of l.tasks) for (const lb of t.labels ?? []) set.add(lb);
+    return [...set].sort();
+  }, [board.lists]);
+
+  const matches = useCallback(
+    (task: Task): boolean => {
+      if (fAssignee && !(task.assignees ?? []).some((a) => a.user.id === fAssignee)) return false;
+      if (fPriority && task.priority !== fPriority) return false;
+      if (fLabel && !(task.labels ?? []).includes(fLabel)) return false;
+      if (fText) {
+        const q = fText.toLowerCase();
+        if (!task.title.toLowerCase().includes(q) && !(task.description ?? '').toLowerCase().includes(q)) return false;
+      }
+      if (fDue) {
+        if (fDue === 'none') return !task.dueDate;
+        if (!task.dueDate) return false;
+        const due = new Date(task.dueDate);
+        const now = new Date();
+        const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+        if (fDue === 'overdue' && !(due < now && !task.completedAt)) return false;
+        if (fDue === 'today' && !(due <= endOfToday && due >= now)) return false;
+        if (fDue === 'week' && !(due <= new Date(endOfToday.getTime() + 6 * 86400000) && due >= now)) return false;
+      }
+      return true;
+    },
+    [fAssignee, fPriority, fLabel, fDue, fText],
+  );
+
+  const visibleLists = useMemo(
+    () => (filtersActive ? board.lists.map((l) => ({ ...l, tasks: l.tasks.filter(matches) })) : board.lists),
+    [board.lists, filtersActive, matches],
+  );
+
+  const matchCount = useMemo(
+    () => visibleLists.reduce((n, l) => n + l.tasks.length, 0),
+    [visibleLists],
+  );
+
+  function clearFilters() {
+    setFAssignee(''); setFPriority(''); setFLabel(''); setFDue(''); setFText('');
+  }
 
   // List IDs for sortable context
   const listIds = useMemo(() => board.lists.map((l) => l.id), [board.lists]);
@@ -267,6 +328,60 @@ export default function KanbanBoard({ board, projectId, readOnly = false }: Kanb
         </div>
       </div>
 
+      {/* Filters (Pro) */}
+      {canFilter ? (
+        <div className="soft-card mb-4 rounded-xl p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={fText}
+              onChange={(e) => setFText(e.target.value)}
+              placeholder="Search cards…"
+              className="field-input min-h-0 w-44 py-1.5 text-sm"
+            />
+            <select value={fAssignee} onChange={(e) => setFAssignee(e.target.value)} className="field-select min-h-0 px-2 py-1.5 text-xs">
+              <option value="">Any assignee</option>
+              {members.map((m) => (
+                <option key={m.user.id} value={m.user.id}>{m.user.name}</option>
+              ))}
+            </select>
+            <select value={fPriority} onChange={(e) => setFPriority(e.target.value)} className="field-select min-h-0 px-2 py-1.5 text-xs">
+              <option value="">Any priority</option>
+              {['URGENT', 'HIGH', 'MEDIUM', 'LOW'].map((p) => <option key={p} value={p}>{p}</option>)}
+            </select>
+            {allLabels.length > 0 && (
+              <select value={fLabel} onChange={(e) => setFLabel(e.target.value)} className="field-select min-h-0 px-2 py-1.5 text-xs">
+                <option value="">Any label</option>
+                {allLabels.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            )}
+            <select value={fDue} onChange={(e) => setFDue(e.target.value)} className="field-select min-h-0 px-2 py-1.5 text-xs">
+              <option value="">Any due date</option>
+              <option value="overdue">Overdue</option>
+              <option value="today">Due today</option>
+              <option value="week">Due this week</option>
+              <option value="none">No due date</option>
+            </select>
+            {filtersActive && (
+              <>
+                <span className="pill-accent text-xs">{matchCount} matching</span>
+                <button onClick={clearFilters} className="text-xs font-semibold text-accent hover:underline">
+                  Clear
+                </button>
+              </>
+            )}
+          </div>
+          {filtersActive && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              Drag is paused while filters are active — clear them to reorder cards.
+            </p>
+          )}
+        </div>
+      ) : usage ? (
+        <div className="soft-card mb-4 rounded-xl px-4 py-2.5 text-xs text-muted-foreground">
+          Advanced board filters — search, assignee, priority, label and due date — are part of the Pro plan.
+        </div>
+      ) : null}
+
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -276,7 +391,7 @@ export default function KanbanBoard({ board, projectId, readOnly = false }: Kanb
       >
         <div className="flex gap-4 overflow-x-auto pb-3 [scrollbar-width:thin]">
           <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
-            {board.lists.map((list, index) => (
+            {visibleLists.map((list, index) => (
               <KanbanList
                 key={list.id}
                 list={list}
