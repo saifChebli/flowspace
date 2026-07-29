@@ -6,6 +6,7 @@ import { AppError } from '../../middleware/errorHandler';
 import { env } from '../../config/env';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
+import { PLAN_FEATURES, effectivePlan } from '../plans/service';
 
 const PORTAL_SESSION_DAYS = 90;
 
@@ -320,6 +321,7 @@ export async function validateSession(sessionToken: string) {
     userId: session.userId,
     projectId: session.projectId,
     project: session.project,
+    branding: await getPortalBranding(session.project.workspaceId),
   };
 }
 
@@ -328,10 +330,31 @@ export async function validateSession(sessionToken: string) {
 export async function getPortalProject(portalToken: string) {
   const project = await prisma.project.findUnique({
     where: { clientPortalToken: portalToken },
-    select: { id: true, name: true, description: true },
+    select: { id: true, name: true, description: true, workspaceId: true },
   });
   if (!project) throw new AppError(404, 'Invalid portal link');
-  return project;
+  const { workspaceId, ...rest } = project;
+  return { ...rest, branding: await getPortalBranding(workspaceId) };
+}
+
+/**
+ * Branding for the client-facing portal. Agency plans get their own logo/name
+ * and colour and lose the "Powered by" mark — everyone else sees it.
+ */
+export async function getPortalBranding(workspaceId: string) {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { name: true, logoUrl: true, accentColor: true, plan: true, planExpiresAt: true },
+  });
+  if (!workspace) return { name: null, logoUrl: null, accentColor: null, showPoweredBy: true };
+
+  const whiteLabel = PLAN_FEATURES[effectivePlan(workspace)].whiteLabel;
+  return {
+    name: whiteLabel ? workspace.name : null,
+    logoUrl: whiteLabel ? workspace.logoUrl : null,
+    accentColor: whiteLabel ? workspace.accentColor : null,
+    showPoweredBy: !whiteLabel,
+  };
 }
 
 // ── Multi-project: get all projects where user is CLIENT ───────────────────

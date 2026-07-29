@@ -22,6 +22,22 @@ export function effectivePlan(workspace: { plan: Plan; planExpiresAt: Date | nul
   return workspace.plan;
 }
 
+/** Feature gates by plan (as advertised on the pricing page). */
+export const PLAN_FEATURES = {
+  FREE: { whiteLabel: false, analytics: false, advancedFilters: false },
+  PRO: { whiteLabel: false, analytics: false, advancedFilters: true },
+  AGENCY: { whiteLabel: true, analytics: true, advancedFilters: true },
+} as const satisfies Record<Plan, Record<string, boolean>>;
+
+export async function getPlanFeatures(workspaceId: string) {
+  const workspace = await prisma.workspace.findUnique({
+    where: { id: workspaceId },
+    select: { plan: true, planExpiresAt: true },
+  });
+  if (!workspace) throw new AppError(404, 'Workspace not found');
+  return PLAN_FEATURES[effectivePlan(workspace)];
+}
+
 export interface WorkspaceUsage {
   plan: Plan;
   planLabel: string;

@@ -14,6 +14,11 @@ export const createWorkspaceSchema = z.object({
 export const updateWorkspaceSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   description: z.string().max(300).optional(),
+  logoUrl: z.string().url().max(500).nullish(),
+  accentColor: z
+    .string()
+    .regex(/^#[0-9a-fA-F]{6}$/, 'Use a hex colour like #0f766e')
+    .nullish(),
 });
 
 export const inviteMemberSchema = z.object({

@@ -126,6 +126,40 @@ export default function WorkspaceSettingsPage() {
     },
   });
 
+  // ─── Portal branding ──────────────────────────────────────────────────
+  const [brandLogo, setBrandLogo] = useState('');
+  const [brandColor, setBrandColor] = useState('');
+  const [brandingLoaded, setBrandingLoaded] = useState(false);
+  if (workspace && !brandingLoaded) {
+    setBrandLogo(workspace.logoUrl ?? '');
+    setBrandColor(workspace.accentColor ?? '');
+    setBrandingLoaded(true);
+  }
+
+  const saveBranding = useMutation({
+    mutationFn: () =>
+      api.patch(`/workspaces/${workspaceSlug}`, {
+        logoUrl: brandLogo.trim() || null,
+        accentColor: brandColor || null,
+      }),
+    onSuccess: () => {
+      toast.success('Branding saved');
+      queryClient.invalidateQueries({ queryKey: ['workspace-detail', workspaceSlug] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Could not save branding';
+      toast.error(msg);
+    },
+  });
+
+  const clearBranding = useMutation({
+    mutationFn: () => api.patch(`/workspaces/${workspaceSlug}`, { logoUrl: null, accentColor: null }),
+    onSuccess: () => {
+      toast.success('Branding reset');
+      queryClient.invalidateQueries({ queryKey: ['workspace-detail', workspaceSlug] });
+    },
+  });
+
   // ─── Export ───────────────────────────────────────────────────────────
   const [exporting, setExporting] = useState(false);
   async function exportWorkspace() {
@@ -362,6 +396,59 @@ export default function WorkspaceSettingsPage() {
               <Link href="/#pricing" className="font-semibold text-accent hover:underline">See plans</Link>
             </p>
           )}
+        </div>
+      )}
+
+      {/* Client portal branding (Agency) */}
+      {isAdmin && usage && (
+        <div className="soft-card rounded-xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h3 className="section-kicker">Client portal branding</h3>
+            {usage.plan !== 'AGENCY' && <span className="pill-muted text-xs">Agency plan</span>}
+          </div>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            {usage.plan === 'AGENCY'
+              ? 'Your logo and colour appear on the client portal, and the CollabSpace mark is hidden.'
+              : 'On the Agency plan the client portal shows your logo and colour instead of the CollabSpace mark. You can set these now — they apply automatically when you upgrade.'}
+          </p>
+
+          <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
+            <div>
+              <label className="form-label">Logo URL</label>
+              <input
+                value={brandLogo}
+                onChange={(e) => setBrandLogo(e.target.value)}
+                placeholder="https://yourdomain.com/logo.png"
+                className="field-input"
+              />
+            </div>
+            <div>
+              <label className="form-label">Accent colour</label>
+              <input
+                type="color"
+                value={brandColor || '#b7791f'}
+                onChange={(e) => setBrandColor(e.target.value)}
+                className="h-[42px] w-20 cursor-pointer rounded-lg border border-border bg-white/60 p-1"
+              />
+            </div>
+          </div>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              onClick={() => saveBranding.mutate()}
+              disabled={saveBranding.isPending}
+              className="primary-button px-4 py-2 text-sm disabled:opacity-60"
+            >
+              {saveBranding.isPending ? 'Saving…' : 'Save branding'}
+            </button>
+            {(brandLogo || brandColor) && (
+              <button
+                onClick={() => { setBrandLogo(''); setBrandColor(''); clearBranding.mutate(); }}
+                className="secondary-button px-4 py-2 text-sm"
+              >
+                Reset
+              </button>
+            )}
+          </div>
         </div>
       )}
 

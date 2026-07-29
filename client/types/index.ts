@@ -13,6 +13,7 @@ export interface Workspace {
   slug: string;
   description: string | null;
   logoUrl: string | null;
+  accentColor?: string | null;
   createdAt: string;
   _count?: { members: number; projects: number };
   members?: { role: 'ADMIN' | 'MEMBER' }[];
@@ -230,14 +231,24 @@ export interface ClientPortalData {
   lanes: { id: string; name: string; taskCount: number }[];
   totalTasks: number;
   role: 'MEMBER' | 'CLIENT';
+  branding?: PortalBranding;
 }
 
 // ── Portal types ───────────────────────────────────────────────────────────
+
+/** White-label branding — populated only on Agency plans. */
+export interface PortalBranding {
+  name: string | null;
+  logoUrl: string | null;
+  accentColor: string | null;
+  showPoweredBy: boolean;
+}
 
 export interface PortalProject {
   id: string;
   name: string;
   description: string | null;
+  branding?: PortalBranding;
 }
 
 export interface PortalSession {

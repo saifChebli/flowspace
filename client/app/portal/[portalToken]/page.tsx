@@ -63,14 +63,23 @@ export default function PortalLandingPage() {
     );
   }
 
+  const branding = project.branding;
+
   return (
-    <div className="hero-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 md:p-8">
+    <div
+      className="hero-grid relative flex min-h-screen items-center justify-center overflow-hidden p-4 md:p-8"
+      style={branding?.accentColor ? ({ ['--gold' as string]: branding.accentColor }) : undefined}
+    >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(183,121,31,0.18),transparent_25%),radial-gradient(circle_at_bottom_right,rgba(15,118,110,0.18),transparent_24%)]" />
 
       <div className="glass-card relative w-full max-w-md rounded-2xl p-7 md:p-10">
         <div className="mb-8">
+          {branding?.logoUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
+            <img src={branding.logoUrl} alt={branding.name ?? ''} className="mb-4 h-9 w-auto object-contain" />
+          ) : null}
           <div className="text-xs font-semibold uppercase tracking-[0.2em] text-gold">
-            Client Portal
+            {branding?.name ?? 'Client Portal'}
           </div>
           <h2 className="mt-3 text-3xl font-bold tracking-tight">{project.name}</h2>
           {project.description && (
@@ -133,6 +142,12 @@ export default function PortalLandingPage() {
               </button>
             </form>
           </>
+        )}
+
+        {branding?.showPoweredBy !== false && (
+          <p className="mt-8 text-center text-[11px] text-muted-foreground">
+            Powered by <span className="font-semibold">CollabSpace</span>
+          </p>
         )}
       </div>
     </div>

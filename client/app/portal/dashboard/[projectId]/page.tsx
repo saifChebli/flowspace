@@ -38,13 +38,22 @@ export default function PortalProjectPage() {
 
   if (!isAuthenticated) return null;
 
+  const branding = data?.branding;
+
   return (
-    <div className="hero-grid min-h-screen px-6 py-8 md:px-10 md:py-10">
+    <div
+      className="hero-grid min-h-screen px-6 py-8 md:px-10 md:py-10"
+      style={branding?.accentColor ? ({ ['--gold' as string]: branding.accentColor }) : undefined}
+    >
       <div className="mx-auto max-w-5xl">
         {/* Header */}
         <header className="mb-8 flex items-center justify-between">
           <div>
-            <div className="eyebrow">Client Portal</div>
+            {branding?.logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={branding.logoUrl} alt={branding.name ?? ''} className="mb-3 h-8 w-auto object-contain" />
+            ) : null}
+            <div className="eyebrow">{branding?.name ?? 'Client Portal'}</div>
             <h1 className="mt-2 text-2xl font-bold tracking-tight">
               {data?.project.name ?? 'Project'}
             </h1>
@@ -186,6 +195,12 @@ export default function PortalProjectPage() {
             )}
           </div>
         ) : null}
+
+        {branding?.showPoweredBy !== false && (
+          <p className="mt-10 text-center text-[11px] text-muted-foreground">
+            Powered by <span className="font-semibold">CollabSpace</span>
+          </p>
+        )}
       </div>
     </div>
   );

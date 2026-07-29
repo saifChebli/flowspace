@@ -1,4 +1,5 @@
 import { prisma } from '../../lib/prisma';
+import { getPortalBranding } from '../portal/service';
 import { AppError } from '../../middleware/errorHandler';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -234,7 +235,7 @@ export async function getClientPortal(projectId: string, userId: string) {
   const [project, channels, recentMessages, files, lanes] = await Promise.all([
     prisma.project.findUniqueOrThrow({
       where: { id: projectId },
-      select: { id: true, name: true, description: true },
+      select: { id: true, name: true, description: true, workspaceId: true },
     }),
 
     // Only CLIENT_VISIBLE channels
@@ -310,5 +311,6 @@ export async function getClientPortal(projectId: string, userId: string) {
     })),
     totalTasks,
     role: member.role,
+    branding: await getPortalBranding(project.workspaceId),
   };
 }

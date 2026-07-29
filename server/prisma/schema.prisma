@@ -116,6 +116,7 @@ model Workspace {
   slug          String    @unique
   description   String?
   logoUrl       String?
+  accentColor   String? // hex colour used to theme the white-label client portal
   ownerId       String? // workspace owner (creator); nullable for legacy rows
   plan          Plan      @default(FREE)
   planExpiresAt DateTime? // null = no expiry (free, or manually granted)
