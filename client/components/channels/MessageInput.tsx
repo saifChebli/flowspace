@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Send } from 'lucide-react';
 import api from '@/lib/api';
+import { toast } from 'sonner';
 import type { Message } from '@/types';
 
 interface MemberInfo {
@@ -53,6 +54,12 @@ export default function MessageInput({
       setBody('');
       setMentionedUserIds([]);
       setMentionQuery(null);
+    },
+    onError: (err: unknown) => {
+      // The draft is deliberately left in the textarea so nothing is lost on retry.
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Message not sent. Check your connection and try again.';
+      toast.error(msg);
     },
   });
 

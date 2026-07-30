@@ -11,6 +11,7 @@ export const updateBoardSchema = z.object({
 export const createListSchema = z.object({
   name: z.string().min(1).max(100),
   position: z.number().int().min(0),
+  isDoneColumn: z.boolean().optional(),
 });
 
 export const updateListSchema = createListSchema.partial();

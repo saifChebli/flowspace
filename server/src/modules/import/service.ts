@@ -66,12 +66,17 @@ export async function importTrelloCsv(
   let tasksCreated = 0;
 
   for (const [listName, cards] of byList) {
+    const isDoneList = /\b(done|complete|completed|shipped)\b/i.test(listName);
+
     const list = await prisma.boardList.create({
-      data: { boardId: board.id, name: listName.slice(0, 100), position: listsCreated },
+      data: {
+        boardId: board.id,
+        name: listName.slice(0, 100),
+        position: listsCreated,
+        isDoneColumn: isDoneList,
+      },
     });
     listsCreated++;
-
-    const isDoneList = /\b(done|complete|completed|shipped)\b/i.test(listName);
 
     await prisma.task.createMany({
       data: cards.map((rec, i) => {

@@ -1,7 +1,7 @@
 import { prisma } from '../../lib/prisma';
 import { AppError } from '../../middleware/errorHandler';
 import { storageConfig } from '../../config/storage';
-import { generateUploadSignature, getCloudinaryResource } from '../../lib/cloudinary';
+import { generateUploadSignature, getCloudinaryResource, deleteCloudinaryAsset } from '../../lib/cloudinary';
 import { io } from '../../server';
 import { logActivity } from '../../events/activity';
 import { assertCanUpload } from '../plans/service';
@@ -132,6 +132,45 @@ export async function getProjectFiles(projectId: string, userId: string) {
     include: { uploadedBy: { select: { id: true, name: true, avatarUrl: true } } },
     orderBy: { createdAt: 'desc' },
   });
+}
+
+/**
+ * Delete a file. Without this the quota error told users to "delete some files"
+ * for an action the API didn't implement, so a workspace at its storage cap was
+ * permanently unable to upload.
+ */
+export async function deleteFile(fileId: string, userId: string) {
+  const file = await prisma.file.findUnique({ where: { id: fileId } });
+  if (!file) throw new AppError(404, 'File not found');
+
+  const member = await assertTeamMember(file.projectId, userId);
+  // Uploader can always remove their own; otherwise a workspace admin can.
+  if (file.uploadedById !== userId) {
+    const project = await prisma.project.findUnique({
+      where: { id: file.projectId },
+      select: { workspace: { select: { members: { where: { userId, role: 'ADMIN' }, select: { id: true } } } } },
+    });
+    if (!project?.workspace.members.length) {
+      throw new AppError(403, 'Only the uploader or a workspace admin can delete this file');
+    }
+  }
+  void member;
+
+  // Remove attachment links first — MessageAttachment has no cascade on fileId.
+  await prisma.$transaction([
+    prisma.messageAttachment.deleteMany({ where: { fileId } }),
+    prisma.file.delete({ where: { id: fileId } }),
+  ]);
+
+  // Best-effort: the DB row is the source of truth for quota, so a failed remote
+  // delete shouldn't fail the request (it would just leave an orphaned asset).
+  try {
+    await deleteCloudinaryAsset(file.storageKey);
+  } catch (err) {
+    console.error('[files] Cloudinary delete failed for', file.storageKey, err);
+  }
+
+  return { message: 'File deleted' };
 }
 
 export async function getFileDownloadUrl(fileId: string, userId: string) {

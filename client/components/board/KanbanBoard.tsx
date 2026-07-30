@@ -23,6 +23,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import api from '@/lib/api';
+import { toast } from 'sonner';
 import { useSocket } from '@/hooks/useSocket';
 import { Plus } from 'lucide-react';
 import type { Board, BoardList, Task, Project } from '@/types';
@@ -171,6 +172,14 @@ export default function KanbanBoard({ board, projectId, readOnly = false }: Kanb
     mutationFn: ({ taskId, listId, position }: { taskId: string; listId: string; position: number }) =>
       api.post(`/tasks/${taskId}/move`, { listId, position }),
     onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
+    },
+    onError: (err: unknown) => {
+      // Without this a failed move left the optimistic UI showing a card where it
+      // isn't, until something else happened to refetch.
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Could not move that card.';
+      toast.error(msg);
       queryClient.invalidateQueries({ queryKey: ['boards', projectId] });
     },
   });

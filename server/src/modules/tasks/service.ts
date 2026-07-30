@@ -83,11 +83,15 @@ export async function getTask(taskId: string, userId: string) {
 }
 
 export async function updateTask(taskId: string, userId: string, input: UpdateTaskInput) {
-  const task = await prisma.task.findUnique({ where: { id: taskId }, include: { list: { include: { board: true } } } });
+  const task = await prisma.task.findUnique({
+    where: { id: taskId },
+    include: { list: { include: { board: true } }, assignees: { select: { userId: true } } },
+  });
   if (!task) throw new AppError(404, 'Task not found');
   await assertTeamMember(task.list.board.projectId, userId);
 
   const { assigneeIds, ...taskData } = input;
+  const previousAssignees = new Set(task.assignees.map((a) => a.userId));
 
   const updated = await prisma.task.update({
     where: { id: taskId },
@@ -106,9 +110,12 @@ export async function updateTask(taskId: string, userId: string, input: UpdateTa
     include: { assignees: { include: { user: { select: { id: true, name: true, avatarUrl: true } } } } },
   });
 
-  // Notify newly assigned users
+  // Notify only genuinely NEW assignees. Previously every edit (even changing a
+  // due date, since the client resends the unchanged assignee list) re-notified
+  // everyone — and `skipDuplicates` is a no-op here as Notification has no
+  // unique constraint, so it also produced an email in the next digest.
   if (assigneeIds?.length) {
-    const recipients = assigneeIds.filter((uid) => uid !== userId);
+    const recipients = assigneeIds.filter((uid) => uid !== userId && !previousAssignees.has(uid));
     if (recipients.length) {
       await prisma.notification.createMany({
         data: recipients.map((uid) => ({
@@ -150,29 +157,49 @@ export async function moveTask(taskId: string, userId: string, input: MoveTaskIn
     throw new AppError(403, 'Cannot move a task to another project');
   }
 
-  const derivedStatus = statusFromListName(targetList.name);
-  const data: { listId: string; position: number; status?: TaskStatus; completedAt?: Date | null } = {
+  // The explicit flag is authoritative; the name heuristic remains only as a
+  // fallback for boards created before `isDoneColumn` existed.
+  const isDone = targetList.isDoneColumn || statusFromListName(targetList.name) === 'DONE';
+
+  const data: { listId: string; position: number; status: TaskStatus; completedAt: Date | null } = {
     listId: input.listId,
     position: input.position,
+    status: isDone ? 'DONE' : statusFromListName(targetList.name) ?? 'TODO',
+    // Always recompute completion — previously, moving a finished card into a
+    // column we couldn't name-match left it flagged complete forever.
+    completedAt: isDone ? task.completedAt ?? new Date() : null,
   };
-  if (derivedStatus) {
-    data.status = derivedStatus;
-    if (derivedStatus === 'DONE') {
-      data.completedAt = task.completedAt ?? new Date();
-    } else if (task.completedAt) {
-      data.completedAt = null; // moved out of Done
-    }
-  }
 
-  const updated = await prisma.task.update({ where: { id: taskId }, data });
+  // Reindex both affected lists in one transaction. Writing the client's raw
+  // position left duplicates (two cards at 0), and `orderBy: position` has no
+  // tiebreaker — so card order flipped between reloads.
+  const updated = await prisma.$transaction(async (tx) => {
+    const moved = await tx.task.update({ where: { id: taskId }, data });
+
+    const listIds = [...new Set([task.listId, input.listId])];
+    for (const listId of listIds) {
+      const siblings = await tx.task.findMany({
+        where: { listId, deletedAt: null },
+        orderBy: [{ position: 'asc' }, { updatedAt: 'desc' }],
+        select: { id: true },
+      });
+      await Promise.all(
+        siblings.map((s, index) =>
+          tx.task.update({ where: { id: s.id }, data: { position: index } }),
+        ),
+      );
+    }
+
+    return moved;
+  });
 
   io.to(`project:${projectId}`).emit('task:moved', { taskId, listId: input.listId, position: input.position });
 
   await logActivity({
     projectId,
     actorId: userId,
-    type: derivedStatus === 'DONE' ? 'TASK_COMPLETED' : 'TASK_MOVED',
-    clientVisible: derivedStatus === 'DONE',
+    type: isDone ? 'TASK_COMPLETED' : 'TASK_MOVED',
+    clientVisible: isDone,
     meta: { taskId, taskTitle: task.title, listName: targetList.name },
   });
 

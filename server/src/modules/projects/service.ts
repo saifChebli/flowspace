@@ -7,7 +7,7 @@ import { sendEmail, inviteEmailTemplate, clientInviteEmailTemplate } from '../..
 import { env } from '../../config/env';
 import { logActivity } from '../../events/activity';
 import { assertCanCreateProject } from '../plans/service';
-import { PROJECT_TEMPLATES } from './templates';
+import { PROJECT_TEMPLATES, doneColumnIndex } from './templates';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -42,30 +42,41 @@ export async function createProject(workspaceSlug: string, userId: string, input
   const { template = 'client', ...projectData } = input;
   const tpl = PROJECT_TEMPLATES[template] ?? PROJECT_TEMPLATES.client;
 
-  const project = await prisma.project.create({
-    data: {
-      workspaceId: workspace.id,
-      ...projectData,
-      members: { create: { userId, role: 'MEMBER' } },
-    },
+  // One transaction: a failure part-way used to leave a project that consumed
+  // quota but had no channels and no board — while the UI promises both.
+  return prisma.$transaction(async (tx) => {
+    const project = await tx.project.create({
+      data: {
+        workspaceId: workspace.id,
+        ...projectData,
+        members: { create: { userId, role: 'MEMBER' } },
+      },
+    });
+
+    if (tpl.channels.length > 0) {
+      await tx.channel.createMany({
+        data: tpl.channels.map((c) => ({ projectId: project.id, name: c.name, type: c.type })),
+        skipDuplicates: true,
+      });
+    }
+
+    if (tpl.lists.length > 0) {
+      const board = await tx.board.create({ data: { projectId: project.id, name: 'Main Board' } });
+      const doneIndex = doneColumnIndex(tpl.lists);
+      await tx.boardList.createMany({
+        // The final column is the completion column — without this, templates whose
+        // last list isn't literally called "Done" could never complete a task.
+        data: tpl.lists.map((name, position) => ({
+          boardId: board.id,
+          name,
+          position,
+          isDoneColumn: position === doneIndex,
+        })),
+      });
+    }
+
+    return project;
   });
-
-  // Scaffold channels + board so a new project is usable immediately
-  // (the landing page promises these are created automatically).
-  if (tpl.channels.length > 0) {
-    await prisma.channel.createMany({
-      data: tpl.channels.map((c) => ({ projectId: project.id, name: c.name, type: c.type })),
-      skipDuplicates: true,
-    });
-  }
-  if (tpl.lists.length > 0) {
-    const board = await prisma.board.create({ data: { projectId: project.id, name: 'Main Board' } });
-    await prisma.boardList.createMany({
-      data: tpl.lists.map((name, position) => ({ boardId: board.id, name, position })),
-    });
-  }
-
-  return project;
 }
 
 export async function getProjects(workspaceSlug: string, userId: string) {

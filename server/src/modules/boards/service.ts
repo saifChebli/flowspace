@@ -54,7 +54,25 @@ export async function updateList(listId: string, userId: string, input: UpdateLi
   const list = await prisma.boardList.findUnique({ where: { id: listId }, include: { board: true } });
   if (!list) throw new AppError(404, 'List not found');
   await assertTeamMember(list.board.projectId, userId);
-  return prisma.boardList.update({ where: { id: listId }, data: input });
+
+  // Toggling the completion column has to re-settle the tasks already sitting in
+  // it, or the board and the analytics disagree until each card is dragged again.
+  const togglesDone = input.isDoneColumn !== undefined && input.isDoneColumn !== list.isDoneColumn;
+  if (!togglesDone) {
+    return prisma.boardList.update({ where: { id: listId }, data: input });
+  }
+
+  const nowDone = input.isDoneColumn === true;
+  const [updated] = await prisma.$transaction([
+    prisma.boardList.update({ where: { id: listId }, data: input }),
+    prisma.task.updateMany({
+      where: { listId, deletedAt: null },
+      data: nowDone
+        ? { status: 'DONE', completedAt: new Date() }
+        : { status: 'TODO', completedAt: null },
+    }),
+  ]);
+  return updated;
 }
 
 export async function deleteList(listId: string, userId: string) {

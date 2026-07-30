@@ -5,7 +5,13 @@ export interface ProjectTemplate {
   label: string;
   description: string;
   channels: { name: string; type: ChannelType }[];
+  /** Ordered board columns. The LAST entry is treated as the completion column. */
   lists: string[];
+}
+
+/** Index of the column that means "finished" for a template's list set. */
+export function doneColumnIndex(lists: string[]): number {
+  return lists.length - 1;
 }
 
 // ponytail: built-in templates as data, not a DB model — add saved/custom

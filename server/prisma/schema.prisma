@@ -289,12 +289,15 @@ model Board {
 }
 
 model BoardList {
-  id        String   @id @default(cuid())
-  boardId   String
-  name      String
-  position  Int
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id           String   @id @default(cuid())
+  boardId      String
+  name         String
+  position     Int
+  /// Marks the completion column. Explicit, because deriving "done" from the
+  /// list *name* silently broke on templates like "Launched" / "Published".
+  isDoneColumn Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
   tasks Task[]

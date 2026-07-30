@@ -6,21 +6,24 @@ const mockChannel = { findUnique: jest.fn() };
 const mockProjectMember = { findUnique: jest.fn() };
 const mockChannelMember = { findUnique: jest.fn() };
 const mockMessage = { findUnique: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
-const mockTask = { findUnique: jest.fn(), update: jest.fn() };
+const mockTask = { findUnique: jest.fn(), update: jest.fn(), findMany: jest.fn().mockResolvedValue([]) };
 const mockBoardList = { findUnique: jest.fn() };
 const mockFile = { count: jest.fn() };
 
-jest.mock('../lib/prisma', () => ({
-  prisma: {
-    channel: mockChannel,
-    projectMember: mockProjectMember,
-    channelMember: mockChannelMember,
-    message: mockMessage,
-    task: mockTask,
-    boardList: mockBoardList,
-    file: mockFile,
-  },
-}));
+// moveTask reindexes inside a transaction; run the callback against the same mocks.
+const mockPrisma: Record<string, unknown> = {
+  channel: mockChannel,
+  projectMember: mockProjectMember,
+  channelMember: mockChannelMember,
+  message: mockMessage,
+  task: mockTask,
+  boardList: mockBoardList,
+  file: mockFile,
+};
+mockPrisma.$transaction = (arg: unknown) =>
+  typeof arg === 'function' ? (arg as (tx: unknown) => unknown)(mockPrisma) : Promise.all(arg as unknown[]);
+
+jest.mock('../lib/prisma', () => ({ prisma: mockPrisma }));
 jest.mock('../server', () => ({ io: { to: () => ({ emit: jest.fn() }) } }));
 jest.mock('../events/activity', () => ({ logActivity: jest.fn() }));
 
@@ -116,6 +119,7 @@ describe('moveTask (C4)', () => {
       id: 't1',
       completedAt: null,
       title: 'x',
+      listId: 'l1',
       list: { board: { projectId: 'p1' } },
     });
     mockProjectMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
@@ -123,6 +127,39 @@ describe('moveTask (C4)', () => {
     mockTask.update.mockResolvedValue({ id: 't1' });
 
     await expect(moveTask('t1', 'u1', { listId: 'l2', position: 0 })).resolves.toBeTruthy();
+  });
+});
+
+describe('task completion is driven by isDoneColumn, not the list name', () => {
+  const setup = (targetList: Record<string, unknown>, completedAt: Date | null = null) => {
+    mockTask.findUnique.mockResolvedValue({
+      id: 't1', completedAt, title: 'x', listId: 'l1', list: { board: { projectId: 'p1' } },
+    });
+    mockProjectMember.findUnique.mockResolvedValue({ role: 'MEMBER' });
+    mockBoardList.findUnique.mockResolvedValue({ board: { projectId: 'p1' }, ...targetList });
+    mockTask.update.mockResolvedValue({ id: 't1' });
+  };
+  const dataWritten = () => mockTask.update.mock.calls[0][0].data;
+
+  it('completes a task dropped in a flagged column whose name is NOT "Done"', async () => {
+    // This is the template bug: "Launched"/"Published" never matched the name regex.
+    setup({ id: 'l2', name: 'Launched', isDoneColumn: true });
+    await moveTask('t1', 'u1', { listId: 'l2', position: 0 });
+    expect(dataWritten().status).toBe('DONE');
+    expect(dataWritten().completedAt).toBeInstanceOf(Date);
+  });
+
+  it('still completes on legacy boards via the name fallback', async () => {
+    setup({ id: 'l2', name: 'Done', isDoneColumn: false });
+    await moveTask('t1', 'u1', { listId: 'l2', position: 0 });
+    expect(dataWritten().status).toBe('DONE');
+  });
+
+  it('clears completion when moved out of the done column', async () => {
+    setup({ id: 'l2', name: 'QA', isDoneColumn: false }, new Date());
+    await moveTask('t1', 'u1', { listId: 'l2', position: 0 });
+    expect(dataWritten().completedAt).toBeNull();
+    expect(dataWritten().status).not.toBe('DONE');
   });
 });
 

@@ -4,6 +4,7 @@ import { useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '@/lib/api';
+import { toast } from 'sonner';
 import type { DashboardData } from '@/types';
 
 interface FileRecord {
@@ -36,7 +37,7 @@ function formatBytes(bytes: number) {
 }
 
 export default function ProjectFilesPage() {
-  const { projectId } = useParams<{ projectId: string }>();
+  const { projectId, workspaceSlug } = useParams<{ projectId: string; workspaceSlug: string }>();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
@@ -59,6 +60,21 @@ export default function ProjectFilesPage() {
     mutationFn: (fileId: string) =>
       api.get<{ url: string }>(`/projects/${projectId}/files/${fileId}/download`).then((r) => r.data),
     onSuccess: ({ url }) => window.open(url, '_blank'),
+    onError: () => toast.error('Could not open that file. Please try again.'),
+  });
+
+  const removeFile = useMutation({
+    mutationFn: (fileId: string) => api.delete(`/projects/${projectId}/files/${fileId}`),
+    onSuccess: () => {
+      toast.success('File deleted');
+      queryClient.invalidateQueries({ queryKey: ['files', projectId] });
+      queryClient.invalidateQueries({ queryKey: ['workspace-usage', workspaceSlug] });
+    },
+    onError: (err: unknown) => {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Could not delete that file.';
+      toast.error(msg);
+    },
   });
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -202,27 +218,41 @@ export default function ProjectFilesPage() {
           {files?.map((f) => (
             <div
               key={f.id}
-              className="flex items-center justify-between rounded-xl border border-border/80 bg-white/75 px-5 py-4 transition hover:bg-white"
+              className="flex items-center gap-4 rounded-xl border border-border/80 bg-card/75 px-5 py-4 transition hover:bg-card"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-muted text-xl">
-                  {fileIcon(f.mimeType)}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-foreground">{f.name}</p>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {formatBytes(f.sizeBytes)} · uploaded by {f.uploadedBy.name} ·{' '}
-                    {new Date(f.createdAt).toLocaleDateString()}
-                  </p>
-                </div>
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-muted text-xl">
+                {fileIcon(f.mimeType)}
               </div>
-              <button
-                onClick={() => download.mutate(f.id)}
-                disabled={download.isPending}
-                className="secondary-button px-3.5 py-2 text-xs"
-              >
-                {download.isPending ? '…' : 'Download'}
-              </button>
+              {/* min-w-0 + truncate: long filenames used to push the actions off-screen */}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">{f.name}</p>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {formatBytes(f.sizeBytes)} · uploaded by {f.uploadedBy.name} ·{' '}
+                  {new Date(f.createdAt).toLocaleDateString()}
+                </p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  onClick={() => download.mutate(f.id)}
+                  disabled={download.isPending}
+                  className="secondary-button min-h-0 px-3.5 py-2 text-xs"
+                >
+                  {download.isPending ? '…' : 'Download'}
+                </button>
+                {!isClient && (
+                  <button
+                    onClick={() =>
+                      toast(`Delete “${f.name}”?`, {
+                        action: { label: 'Delete', onClick: () => removeFile.mutate(f.id) },
+                      })
+                    }
+                    disabled={removeFile.isPending}
+                    className="secondary-button min-h-0 px-3 py-2 text-xs text-destructive hover:bg-destructive/5 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

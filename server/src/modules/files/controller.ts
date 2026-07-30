@@ -27,3 +27,9 @@ export async function download(req: Request, res: Response, next: NextFunction) 
     res.json(await svc.getFileDownloadUrl(req.params.fileId, req.user!.id));
   } catch (err) { next(err); }
 }
+
+export async function remove(req: Request, res: Response, next: NextFunction) {
+  try {
+    res.json(await svc.deleteFile(req.params.fileId, req.user!.id));
+  } catch (err) { next(err); }
+}
